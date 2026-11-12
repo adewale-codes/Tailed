@@ -12,6 +12,12 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     companies_house_api_key: str = ""
     database_url: str = ""
+    # AI fallback for photos and layouts the parser can't read.
+    claude_model: str = "claude-opus-5-5"
+    claude_effort: str = "medium"
+    # Upload limits.
+    max_upload_mb: int = 20
+    max_pages: int = 30
     # Comma-separated list of origins allowed to call the API (the web app).
     cors_origins: str = "http://localhost:3000"
 

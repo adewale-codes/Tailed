@@ -38,3 +38,17 @@ won't be on Companies House. That check needs mocked API responses in its own te
 Tax model used for `payslip_maths` (2026/27, England, 1257L, NI category A, monthly): personal allowance
 £1,047.50, basic band £3,141.67 at 20%, then 40%; NI 8% between £1,048 and £4,189, 2% above. Employee
 pension is 5% under relief at source, so it does not reduce taxable pay.
+
+## Photo fixture (AI path)
+
+`photo_statement/` holds a simulated phone photo of page 1 of `genuine/statement_2026-08.pdf`
+(perspective, shadow, uneven light, blur, noise, JPEG) and an `expected.json` with the 32
+transactions on that page. Regenerate with:
+
+```bash
+cd api
+uv run python ../fixtures/make_photo.py
+```
+
+The live test that sends it to Claude runs only when `ANTHROPIC_API_KEY` is set:
+`uv run pytest -m live_ai -s`.

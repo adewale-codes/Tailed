@@ -7,6 +7,11 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "pydantic-settings>=2.4",
+    "anthropic>=2.8.0",
+    "pdfplumber>=0.11.10",
+    "pymupdf>=2.1",
+    "python-multipart>=0.0.33",
+    "pillow>=13.0.0",
 ]
 
 [dependency-groups]
@@ -26,6 +31,7 @@ package = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = ["live_ai: calls the real Claude API (needs ANTHROPIC_API_KEY)"]
 
 [tool.ruff]
 line-length = 110

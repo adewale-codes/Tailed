@@ -1,0 +1,240 @@
+{
+  "case": "photo_statement",
+  "synthetic": true,
+  "description": "Simulated phone photo of page 1 of genuine/statement_2026-08.pdf. Must go through the AI path.",
+  "source_pdf": "genuine/statement_2026-08.pdf",
+  "page": 1,
+  "truth": {
+    "document_type": "bank_statement",
+    "account_holder": "Mr Jordan A Hayes",
+    "period_start": "2026-08-01",
+    "period_end": "2026-08-31",
+    "opening_balance": "2486.73",
+    "transactions": [
+      {
+        "date": "2026-08-01",
+        "description": "R HOLLOWAY LETTINGS RENT",
+        "paid_in": null,
+        "paid_out": "950.00",
+        "balance": "1536.73"
+      },
+      {
+        "date": "2026-08-01",
+        "description": "LEEDS CITY COUNCIL CTAX",
+        "paid_in": null,
+        "paid_out": "142.00",
+        "balance": "1394.73"
+      },
+      {
+        "date": "2026-08-01",
+        "description": "SAINSBURYS S/MKTS LEEDS",
+        "paid_in": null,
+        "paid_out": "27.49",
+        "balance": "1367.24"
+      },
+      {
+        "date": "2026-08-02",
+        "description": "NANDOS LEEDS TRINITY",
+        "paid_in": null,
+        "paid_out": "27.33",
+        "balance": "1339.91"
+      },
+      {
+        "date": "2026-08-02",
+        "description": "NANDOS LEEDS TRINITY",
+        "paid_in": null,
+        "paid_out": "40.06",
+        "balance": "1299.85"
+      },
+      {
+        "date": "2026-08-03",
+        "description": "OCTOPUS ENERGY",
+        "paid_in": null,
+        "paid_out": "78.40",
+        "balance": "1221.45"
+      },
+      {
+        "date": "2026-08-04",
+        "description": "ALDI 72 LEEDS",
+        "paid_in": null,
+        "paid_out": "51.89",
+        "balance": "1169.56"
+      },
+      {
+        "date": "2026-08-04",
+        "description": "PRET A MANGER LEEDS",
+        "paid_in": null,
+        "paid_out": "5.87",
+        "balance": "1163.69"
+      },
+      {
+        "date": "2026-08-04",
+        "description": "AMAZON.CO.UK*7BL75V",
+        "paid_in": null,
+        "paid_out": "36.43",
+        "balance": "1127.26"
+      },
+      {
+        "date": "2026-08-05",
+        "description": "YORKSHIRE WATER",
+        "paid_in": null,
+        "paid_out": "38.20",
+        "balance": "1089.06"
+      },
+      {
+        "date": "2026-08-05",
+        "description": "DELIVEROO.CO.UK",
+        "paid_in": null,
+        "paid_out": "16.06",
+        "balance": "1073.00"
+      },
+      {
+        "date": "2026-08-06",
+        "description": "ALDI 72 LEEDS",
+        "paid_in": null,
+        "paid_out": "29.93",
+        "balance": "1043.07"
+      },
+      {
+        "date": "2026-08-07",
+        "description": "TESCO STORES 2871 LEEDS",
+        "paid_in": null,
+        "paid_out": "45.93",
+        "balance": "997.14"
+      },
+      {
+        "date": "2026-08-07",
+        "description": "NORTHERN TRAINS LTD",
+        "paid_in": null,
+        "paid_out": "8.66",
+        "balance": "988.48"
+      },
+      {
+        "date": "2026-08-08",
+        "description": "VODAFONE LTD",
+        "paid_in": null,
+        "paid_out": "22.00",
+        "balance": "966.48"
+      },
+      {
+        "date": "2026-08-09",
+        "description": "GREGGS 1823 LEEDS",
+        "paid_in": null,
+        "paid_out": "7.00",
+        "balance": "959.48"
+      },
+      {
+        "date": "2026-08-11",
+        "description": "S PATEL DINNER",
+        "paid_in": "22.50",
+        "paid_out": null,
+        "balance": "981.98"
+      },
+      {
+        "date": "2026-08-12",
+        "description": "PUREGYM LTD",
+        "paid_in": null,
+        "paid_out": "24.99",
+        "balance": "956.99"
+      },
+      {
+        "date": "2026-08-12",
+        "description": "SAINSBURYS S/MKTS LEEDS",
+        "paid_in": null,
+        "paid_out": "41.78",
+        "balance": "915.21"
+      },
+      {
+        "date": "2026-08-12",
+        "description": "NORTHERN TRAINS LTD",
+        "paid_in": null,
+        "paid_out": "10.00",
+        "balance": "905.21"
+      },
+      {
+        "date": "2026-08-13",
+        "description": "COSTA COFFEE 4419 LEEDS",
+        "paid_in": null,
+        "paid_out": "5.63",
+        "balance": "899.58"
+      },
+      {
+        "date": "2026-08-14",
+        "description": "ALDI 72 LEEDS",
+        "paid_in": null,
+        "paid_out": "59.51",
+        "balance": "840.07"
+      },
+      {
+        "date": "2026-08-14",
+        "description": "DELIVEROO.CO.UK",
+        "paid_in": null,
+        "paid_out": "26.08",
+        "balance": "813.99"
+      },
+      {
+        "date": "2026-08-15",
+        "description": "NETFLIX.COM",
+        "paid_in": null,
+        "paid_out": "10.99",
+        "balance": "803.00"
+      },
+      {
+        "date": "2026-08-16",
+        "description": "CO-OP GROUP 070417 LEEDS",
+        "paid_in": null,
+        "paid_out": "27.57",
+        "balance": "775.43"
+      },
+      {
+        "date": "2026-08-17",
+        "description": "PRET A MANGER LEEDS",
+        "paid_in": null,
+        "paid_out": "4.61",
+        "balance": "770.82"
+      },
+      {
+        "date": "2026-08-17",
+        "description": "GREGGS 1823 LEEDS",
+        "paid_in": null,
+        "paid_out": "4.82",
+        "balance": "766.00"
+      },
+      {
+        "date": "2026-08-17",
+        "description": "NORTHERN TRAINS LTD",
+        "paid_in": null,
+        "paid_out": "11.66",
+        "balance": "754.34"
+      },
+      {
+        "date": "2026-08-18",
+        "description": "NORTHERN TRAINS LTD",
+        "paid_in": null,
+        "paid_out": "10.36",
+        "balance": "743.98"
+      },
+      {
+        "date": "2026-08-18",
+        "description": "FIRST BUS WEST YORKS",
+        "paid_in": null,
+        "paid_out": "10.22",
+        "balance": "733.76"
+      },
+      {
+        "date": "2026-08-19",
+        "description": "SPOTIFY UK",
+        "paid_in": null,
+        "paid_out": "11.99",
+        "balance": "721.77"
+      },
+      {
+        "date": "2026-08-19",
+        "description": "PRET A MANGER LEEDS",
+        "paid_in": null,
+        "paid_out": "3.88",
+        "balance": "717.89"
+      }
+    ]
+  }
+}
