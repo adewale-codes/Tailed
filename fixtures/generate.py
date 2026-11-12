@@ -739,19 +739,19 @@ def write_metadata(path: Path, info: dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 CHECK_IDS = [
-    "balance_arithmetic",   # running balances and summary totals add up
-    "document_integrity",   # fonts and PDF metadata show no sign of editing
-    "income_match",         # salary credits on statements match payslip net pay and date
-    "payslip_maths",        # tax and NI are plausible for gross pay, totals add up
-    "name_match",           # same person on statements and payslips
-    "employer_check",       # employer found on Companies House
+    "balances_add_up",       # running balances and summary totals add up; PDF edit signals on statements
+    "documents_agree",       # salary credits on statements match payslip net pay
+    "payslip_realistic",     # tax and NI plausible for gross pay, totals add up
+    "employer_real",         # employer found on Companies House
+    "looks_like_real_life",  # everyday spending present, no runs of identical round amounts
+    "names_match",           # same person on statements and payslips
 ]
 
 
 def all_pass(**overrides: str) -> dict[str, str]:
     checks = {c: "pass" for c in CHECK_IDS}
-    # Employer is fictional, so the Companies House lookup cannot be asserted from fixtures.
-    checks["employer_check"] = "not_asserted"
+    # Employer is fictional, so the live Companies House lookup cannot be asserted from fixtures.
+    checks["employer_real"] = "not_asserted"
     checks.update(overrides)
     return checks
 
@@ -771,7 +771,7 @@ def case_genuine() -> Case:
         statements=build_statements(money("2650.00")),
         payslips=build_payslips(APPLICANT, GENUINE_GROSS),
         holder=APPLICANT,
-        expected_verdict="pass",
+        expected_verdict="looks_good",
         expected_checks=all_pass(),
         expected_flags=[],
     )
@@ -796,11 +796,12 @@ def case_edited_balance() -> Case:
         statements=statements,
         payslips=build_payslips(APPLICANT, GENUINE_GROSS),
         holder=APPLICANT,
-        expected_verdict="flag",
-        expected_checks=all_pass(balance_arithmetic="flag", document_integrity="flag"),
+        expected_verdict="needs_a_closer_look",
+        expected_checks=all_pass(balances_add_up="flag"),
         expected_flags=[
             {
-                "check": "balance_arithmetic",
+                "check": "balances_add_up",
+                "kind": "balance_mismatch",
                 "file": statement_file(oct_stmt),
                 "date": "2026-10-12",
                 "description": edited.description,
@@ -809,14 +810,16 @@ def case_edited_balance() -> Case:
                 "difference": str(bump),
             },
             {
-                "check": "balance_arithmetic",
+                "check": "balances_add_up",
+                "kind": "summary_mismatch",
                 "file": statement_file(oct_stmt),
                 "detail": "summary closing balance does not equal opening + money in - money out",
                 "closing_shown": str(oct_stmt.closing_shown),
                 "closing_expected": str(oct_stmt.true_closing),
             },
             {
-                "check": "document_integrity",
+                "check": "balances_add_up",
+                "kind": "font_change",
                 "file": statement_file(oct_stmt),
                 "date": "2026-10-12",
                 "detail": f"one transaction line uses font '{EDIT_FONT}' while the rest of the "
@@ -839,11 +842,12 @@ def case_salary_mismatch() -> Case:
         statements=build_statements(money("2650.00")),
         payslips=slips,
         holder=APPLICANT,
-        expected_verdict="flag",
-        expected_checks=all_pass(income_match="flag"),
+        expected_verdict="needs_a_closer_look",
+        expected_checks=all_pass(documents_agree="flag"),
         expected_flags=[
             {
-                "check": "income_match",
+                "check": "documents_agree",
+                "kind": "salary_vs_payslip",
                 "file": payslip_file(s),
                 "pay_date": s.pay_date.isoformat(),
                 "payslip_net": str(s.net),
@@ -854,8 +858,8 @@ def case_salary_mismatch() -> Case:
         ],
         notes=[
             "The payslip deductions themselves are plausible for £4,190 gross "
-            f"(model: tax {expected_tax(gross)}, NI {expected_ni(gross)}), so payslip_maths "
-            "should pass within a small tolerance.",
+            f"(model: tax {expected_tax(gross)}, NI {expected_ni(gross)}), so payslip_realistic "
+            "should pass within the 5% tolerance.",
         ],
     )
 
@@ -875,11 +879,12 @@ def case_bad_payslip() -> Case:
         statements=build_statements(net),
         payslips=slips,
         holder=APPLICANT,
-        expected_verdict="flag",
-        expected_checks=all_pass(payslip_maths="flag"),
+        expected_verdict="needs_a_closer_look",
+        expected_checks=all_pass(payslip_realistic="flag"),
         expected_flags=[
             {
-                "check": "payslip_maths",
+                "check": "payslip_realistic",
+                "kind": "tax_ni_out",
                 "file": payslip_file(s),
                 "gross": str(s.gross),
                 "tax_shown": str(s.tax),
@@ -900,11 +905,12 @@ def case_name_mismatch() -> Case:
         statements=build_statements(money("2650.00")),
         payslips=build_payslips(OTHER_PERSON, GENUINE_GROSS),
         holder=APPLICANT,
-        expected_verdict="flag",
-        expected_checks=all_pass(name_match="flag"),
+        expected_verdict="needs_a_closer_look",
+        expected_checks=all_pass(names_match="flag"),
         expected_flags=[
             {
-                "check": "name_match",
+                "check": "names_match",
+                "kind": "name_differs",
                 "statement_name": APPLICANT.full_name,
                 "payslip_name": OTHER_PERSON.full_name,
                 "files": [payslip_file(s) for s in build_payslips(OTHER_PERSON, GENUINE_GROSS)],
@@ -932,11 +938,12 @@ def case_edited_metadata() -> Case:
         statements=statements,
         payslips=build_payslips(APPLICANT, GENUINE_GROSS),
         holder=APPLICANT,
-        expected_verdict="flag",
-        expected_checks=all_pass(document_integrity="flag"),
+        expected_verdict="needs_a_closer_look",
+        expected_checks=all_pass(balances_add_up="flag"),
         expected_flags=[
             {
-                "check": "document_integrity",
+                "check": "balances_add_up",
+                "kind": "modified_after_period",
                 "file": statement_file(oct_stmt),
                 "producer": EDITOR_PRODUCER,
                 "creator": EDITOR_CREATOR,

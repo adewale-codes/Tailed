@@ -2,18 +2,19 @@
   "case": "name_mismatch",
   "synthetic": true,
   "description": "Statements are in the name of Jordan A Hayes; payslips are in the name of Daniel K Okafor. Amounts and dates otherwise agree.",
-  "expected_verdict": "flag",
+  "expected_verdict": "needs_a_closer_look",
   "expected_checks": {
-    "balance_arithmetic": "pass",
-    "document_integrity": "pass",
-    "income_match": "pass",
-    "payslip_maths": "pass",
-    "name_match": "flag",
-    "employer_check": "not_asserted"
+    "balances_add_up": "pass",
+    "documents_agree": "pass",
+    "payslip_realistic": "pass",
+    "employer_real": "not_asserted",
+    "looks_like_real_life": "pass",
+    "names_match": "flag"
   },
   "expected_flags": [
     {
-      "check": "name_match",
+      "check": "names_match",
+      "kind": "name_differs",
       "statement_name": "Jordan A Hayes",
       "payslip_name": "Daniel K Okafor",
       "files": [

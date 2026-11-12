@@ -14,8 +14,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = REPO_ROOT / "fixtures" / "generate.py"
 CASES = ["genuine", "edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
          "edited_metadata"]
-CHECK_IDS = {"balance_arithmetic", "document_integrity", "income_match", "payslip_maths",
-             "name_match", "employer_check"}
+CHECK_IDS = {"balances_add_up", "documents_agree", "payslip_realistic", "employer_real",
+             "looks_like_real_life", "names_match"}
 
 
 @pytest.fixture(scope="module")
@@ -39,7 +39,7 @@ def test_case_folder_complete(out_dir: Path, case: str) -> None:
     assert data["case"] == case
     assert data["synthetic"] is True
     assert set(data["expected_checks"]) == CHECK_IDS
-    assert data["expected_verdict"] in {"pass", "flag"}
+    assert data["expected_verdict"] in {"looks_good", "needs_a_closer_look", "high_risk"}
 
     files = [s["file"] for s in data["truth"]["statements"]]
     files += [p["file"] for p in data["truth"]["payslips"]]
@@ -56,9 +56,9 @@ def test_only_genuine_passes(out_dir: Path) -> None:
         data = load(out_dir, case)
         flagged = {k for k, v in data["expected_checks"].items() if v == "flag"}
         if case == "genuine":
-            assert data["expected_verdict"] == "pass" and not flagged
+            assert data["expected_verdict"] == "looks_good" and not flagged
         else:
-            assert data["expected_verdict"] == "flag" and flagged
+            assert data["expected_verdict"] != "looks_good" and flagged
             assert {f["check"] for f in data["expected_flags"]} == flagged
 
 

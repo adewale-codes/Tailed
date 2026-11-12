@@ -12,6 +12,7 @@ dependencies = [
     "pymupdf>=2.1",
     "python-multipart>=0.0.33",
     "pillow>=13.0.0",
+    "httpx>=0.28.1",
 ]
 
 [dependency-groups]

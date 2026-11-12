@@ -2,14 +2,14 @@
   "case": "genuine",
   "synthetic": true,
   "description": "Three monthly statements and two payslips that all agree.",
-  "expected_verdict": "pass",
+  "expected_verdict": "looks_good",
   "expected_checks": {
-    "balance_arithmetic": "pass",
-    "document_integrity": "pass",
-    "income_match": "pass",
-    "payslip_maths": "pass",
-    "name_match": "pass",
-    "employer_check": "not_asserted"
+    "balances_add_up": "pass",
+    "documents_agree": "pass",
+    "payslip_realistic": "pass",
+    "employer_real": "not_asserted",
+    "looks_like_real_life": "pass",
+    "names_match": "pass"
   },
   "expected_flags": [],
   "notes": [],

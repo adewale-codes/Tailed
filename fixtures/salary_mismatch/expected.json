@@ -2,18 +2,19 @@
   "case": "salary_mismatch",
   "synthetic": true,
   "description": "Statements show \u00a32,650.00 salary but payslips say net pay \u00a33,100.64 (gross \u00a34,190, tax \u00a3628.50, NI \u00a3251.36, pension \u00a3209.50).",
-  "expected_verdict": "flag",
+  "expected_verdict": "needs_a_closer_look",
   "expected_checks": {
-    "balance_arithmetic": "pass",
-    "document_integrity": "pass",
-    "income_match": "flag",
-    "payslip_maths": "pass",
-    "name_match": "pass",
-    "employer_check": "not_asserted"
+    "balances_add_up": "pass",
+    "documents_agree": "flag",
+    "payslip_realistic": "pass",
+    "employer_real": "not_asserted",
+    "looks_like_real_life": "pass",
+    "names_match": "pass"
   },
   "expected_flags": [
     {
-      "check": "income_match",
+      "check": "documents_agree",
+      "kind": "salary_vs_payslip",
       "file": "payslip_2026-09.pdf",
       "pay_date": "2026-09-27",
       "payslip_net": "3100.64",
@@ -21,7 +22,8 @@
       "difference": "450.64"
     },
     {
-      "check": "income_match",
+      "check": "documents_agree",
+      "kind": "salary_vs_payslip",
       "file": "payslip_2026-10.pdf",
       "pay_date": "2026-10-27",
       "payslip_net": "3100.64",
@@ -30,7 +32,7 @@
     }
   ],
   "notes": [
-    "The payslip deductions themselves are plausible for \u00a34,190 gross (model: tax 628.67, NI 251.30), so payslip_maths should pass within a small tolerance."
+    "The payslip deductions themselves are plausible for \u00a34,190 gross (model: tax 628.67, NI 251.30), so payslip_realistic should pass within the 5% tolerance."
   ],
   "truth": {
     "account_holder": "Jordan A Hayes",
