@@ -1,0 +1,132 @@
+{
+  "case": "edited_balance",
+  "synthetic": true,
+  "description": "Same as genuine, but the first balance on 12 Oct 2026 is \u00a3900 too high and every later balance (and the closing balance in the summary) carries it. That one line is rendered in a different font.",
+  "expected_verdict": "flag",
+  "expected_checks": {
+    "balance_arithmetic": "flag",
+    "document_integrity": "flag",
+    "income_match": "pass",
+    "payslip_maths": "pass",
+    "name_match": "pass",
+    "employer_check": "not_asserted"
+  },
+  "expected_flags": [
+    {
+      "check": "balance_arithmetic",
+      "file": "statement_2026-10.pdf",
+      "date": "2026-10-12",
+      "description": "PUREGYM LTD",
+      "balance_shown": "2329.61",
+      "balance_expected": "1429.61",
+      "difference": "900.00"
+    },
+    {
+      "check": "balance_arithmetic",
+      "file": "statement_2026-10.pdf",
+      "detail": "summary closing balance does not equal opening + money in - money out",
+      "closing_shown": "4291.30",
+      "closing_expected": "3391.30"
+    },
+    {
+      "check": "document_integrity",
+      "file": "statement_2026-10.pdf",
+      "date": "2026-10-12",
+      "detail": "one transaction line uses font 'Vera' while the rest of the table uses 'Helvetica'"
+    }
+  ],
+  "notes": [],
+  "truth": {
+    "account_holder": "Jordan A Hayes",
+    "sort_code": "60-91-23",
+    "account_number": "71839264",
+    "bank": "Northgate Bank",
+    "employer": "Brightwater Logistics Ltd",
+    "pay_day": 27,
+    "statements": [
+      {
+        "file": "statement_2026-08.pdf",
+        "period_start": "2026-08-01",
+        "period_end": "2026-08-31",
+        "statement_date": "2026-09-01",
+        "opening_balance": "2486.73",
+        "money_in": "2672.50",
+        "money_out": "2426.35",
+        "closing_balance_true": "2732.88",
+        "closing_balance_shown": "2732.88",
+        "transaction_count": 52,
+        "salary_credits": [
+          {
+            "date": "2026-08-27",
+            "amount": "2650.00",
+            "description": "BRIGHTWATER LOGISTI SALARY"
+          }
+        ]
+      },
+      {
+        "file": "statement_2026-09.pdf",
+        "period_start": "2026-09-01",
+        "period_end": "2026-09-30",
+        "statement_date": "2026-10-01",
+        "opening_balance": "2732.88",
+        "money_in": "2675.00",
+        "money_out": "2413.21",
+        "closing_balance_true": "2994.67",
+        "closing_balance_shown": "2994.67",
+        "transaction_count": 52,
+        "salary_credits": [
+          {
+            "date": "2026-09-27",
+            "amount": "2650.00",
+            "description": "BRIGHTWATER LOGISTI SALARY"
+          }
+        ]
+      },
+      {
+        "file": "statement_2026-10.pdf",
+        "period_start": "2026-10-01",
+        "period_end": "2026-10-31",
+        "statement_date": "2026-11-01",
+        "opening_balance": "2994.67",
+        "money_in": "2668.00",
+        "money_out": "2271.37",
+        "closing_balance_true": "3391.30",
+        "closing_balance_shown": "4291.30",
+        "transaction_count": 52,
+        "salary_credits": [
+          {
+            "date": "2026-10-27",
+            "amount": "2650.00",
+            "description": "BRIGHTWATER LOGISTI SALARY"
+          }
+        ]
+      }
+    ],
+    "payslips": [
+      {
+        "file": "payslip_2026-09.pdf",
+        "employee_name": "Jordan A Hayes",
+        "pay_date": "2026-09-27",
+        "tax_period": 6,
+        "tax_code": "1257L",
+        "gross": "3517.40",
+        "tax": "493.98",
+        "ni": "197.55",
+        "pension": "175.87",
+        "net": "2650.00"
+      },
+      {
+        "file": "payslip_2026-10.pdf",
+        "employee_name": "Jordan A Hayes",
+        "pay_date": "2026-10-27",
+        "tax_period": 7,
+        "tax_code": "1257L",
+        "gross": "3517.40",
+        "tax": "493.98",
+        "ni": "197.55",
+        "pension": "175.87",
+        "net": "2650.00"
+      }
+    ]
+  }
+}
