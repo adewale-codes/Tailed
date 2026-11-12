@@ -13,6 +13,9 @@ dependencies = [
     "python-multipart>=0.0.33",
     "pillow>=13.0.0",
     "httpx>=0.28.1",
+    "sqlalchemy>=2.1.8",
+    "alembic>=1.20.1",
+    "psycopg[binary]>=3.3.9",
 ]
 
 [dependency-groups]
@@ -38,6 +41,11 @@ markers = ["live_ai: calls the real Claude API (needs ANTHROPIC_API_KEY)"]
 line-length = 110
 target-version = "py312"
 src = ["."]
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares form fields and uploads as call defaults by design.
+extend-immutable-calls = ["fastapi.File", "fastapi.Form"]

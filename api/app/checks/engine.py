@@ -12,6 +12,7 @@ Verdict rules:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 
 from app.checks.balances import check_balances
@@ -28,15 +29,22 @@ KEY_CHECKS = {"balances_add_up", "documents_agree"}
 AVG_DAYS_PER_MONTH = Decimal("30.44")
 
 
-def run_checks(docs: list[DocumentInput], monthly_rent: Decimal, companies: CompanyLookup) -> Report:
-    checks = [
-        check_balances(docs),
-        check_documents_agree(docs),
-        check_payslip_realistic(docs),
-        check_employer_real(docs, companies),
-        check_looks_like_real_life(docs),
-        check_names_match(docs),
+def run_checks(docs: list[DocumentInput], monthly_rent: Decimal, companies: CompanyLookup,
+               on_check_done: Callable[[CheckResult], None] | None = None) -> Report:
+    steps: list[Callable[[], CheckResult]] = [
+        lambda: check_balances(docs),
+        lambda: check_documents_agree(docs),
+        lambda: check_payslip_realistic(docs),
+        lambda: check_employer_real(docs, companies),
+        lambda: check_looks_like_real_life(docs),
+        lambda: check_names_match(docs),
     ]
+    checks = []
+    for step in steps:
+        result = step()
+        checks.append(result)
+        if on_check_done is not None:
+            on_check_done(result)
     verdict, reason = decide_verdict(checks)
     return Report(verdict=verdict, verdict_reason=reason, checks=checks,
                   affordability=affordability(docs, monthly_rent))

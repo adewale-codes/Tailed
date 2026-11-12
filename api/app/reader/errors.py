@@ -13,6 +13,7 @@ ErrorCode = Literal[
     "ai_truncated",
     "ai_invalid_response",
     "ai_refused",
+    "ai_daily_limit",
 ]
 
 MESSAGES: dict[str, str] = {
@@ -28,6 +29,10 @@ MESSAGES: dict[str, str] = {
     "ai_truncated": "This document is too long for us to read in one go. Please upload fewer pages.",
     "ai_invalid_response": "We couldn't make sense of this document. Please try a clearer copy.",
     "ai_refused": "We couldn't process this document. Please check it is a bank statement or payslip.",
+    "ai_daily_limit": (
+        "We've reached today's limit for reading photos and scans. Please upload the original PDF "
+        "from your bank or employer, or try again tomorrow."
+    ),
 }
 
 

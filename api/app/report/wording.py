@@ -23,6 +23,7 @@ from typing import Any
 import anthropic
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from app.ai_guard import ai_call_allowed
 from app.checks.models import CHECK_ORDER, CheckResult, Report, Wording
 from app.config import get_settings
 
@@ -211,6 +212,9 @@ def call_claude_wording(payload: dict[str, Any]) -> str | None:
     """One Claude call. Returns the JSON text, or None if Claude can't be used. Replaced in tests."""
     settings = get_settings()
     if not settings.anthropic_api_key:
+        return None
+    if not ai_call_allowed():
+        log.warning("wording.ai.daily_cap_reached")
         return None
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     try:

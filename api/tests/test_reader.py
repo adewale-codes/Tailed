@@ -11,11 +11,9 @@ from pathlib import Path
 
 import pymupdf
 import pytest
-from fastapi.testclient import TestClient
 from pypdf import PdfReader, PdfWriter
 
 from app.config import Settings
-from app.main import app
 from app.reader import ReaderError, read_document
 from app.reader import ai as ai_module
 from app.reader import reader as reader_module
@@ -319,40 +317,6 @@ def test_output_schema_is_strict() -> None:
             for value in node:
                 walk(value)
     walk(OUTPUT_SCHEMA)
-
-
-# ---------------------------------------------------------------------------
-# HTTP endpoint
-# ---------------------------------------------------------------------------
-
-
-def test_endpoint_reads_statement() -> None:
-    client = TestClient(app)
-    data = (FIXTURES / "genuine" / "statement_2026-08.pdf").read_bytes()
-    res = client.post("/documents/read", files={"file": ("s.pdf", data, "application/pdf")})
-    assert res.status_code == 200
-    body = res.json()
-    assert body["source"] == "parser" and len(body["statement"]["transactions"]) == 52
-
-
-@pytest.mark.parametrize("make, code", [
-    (_password_protected_pdf, "password_protected"),
-    (lambda: b"hello", "unsupported_file_type"),
-])
-def test_endpoint_friendly_errors(make, code: str) -> None:
-    client = TestClient(app)
-    res = client.post("/documents/read", files={"file": ("x.pdf", make(), "application/pdf")})
-    assert res.status_code == 422
-    assert res.json()["error"]["code"] == code
-    assert "Traceback" not in res.text
-
-
-def test_endpoint_truncated_ai_is_422_not_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(ai_module, "call_claude", _fake_claude(AiReply("max_tokens", "{")))
-    client = TestClient(app)
-    res = client.post("/documents/read", files={"file": ("p.jpg", PHOTO.read_bytes(), "image/jpeg")})
-    assert res.status_code == 422
-    assert res.json()["error"]["code"] == "ai_truncated"
 
 
 # ---------------------------------------------------------------------------

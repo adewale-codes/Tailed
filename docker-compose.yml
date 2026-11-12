@@ -1,0 +1,17 @@
+# Optional local Postgres for Tallied (alternative to api/scripts/local_db.py).
+#   docker compose up -d
+#   DATABASE_URL=postgresql+psycopg://tallied:tallied@127.0.0.1:55432/tallied
+services:
+  db:
+    image: postgres:16.6
+    environment:
+      POSTGRES_USER: tallied
+      POSTGRES_PASSWORD: tallied
+      POSTGRES_DB: tallied
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - tallied-db:/var/lib/postgresql/data
+      - ./api/scripts/create_test_db.sql:/docker-entrypoint-initdb.d/create_test_db.sql:ro
+volumes:
+  tallied-db:

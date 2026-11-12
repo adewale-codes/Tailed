@@ -17,6 +17,7 @@ from typing import Any, Literal
 import anthropic
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
+from app.ai_guard import ai_call_allowed
 from app.config import get_settings
 from app.reader.errors import ReaderError
 from app.reader.models import (
@@ -331,6 +332,9 @@ def call_claude(pages: list[PageImage]) -> AiReply:
     settings = get_settings()
     if not settings.anthropic_api_key:
         raise ReaderError("ai_unavailable")
+    if not ai_call_allowed():
+        log.warning("reader.ai.daily_cap_reached")
+        raise ReaderError("ai_daily_limit")
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     try:
         with client.beta.messages.stream(
