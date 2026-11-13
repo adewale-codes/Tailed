@@ -33,7 +33,14 @@ def today() -> date:
 
 
 def client_ip(request: Request) -> str:
-    if get_settings().trust_proxy_headers:
+    settings = get_settings()
+    secret = settings.web_proxy_secret
+    sent = request.headers.get("x-tallied-proxy-secret", "")
+    if secret and sent and hmac.compare_digest(sent.encode(), secret.encode()):
+        forwarded_ip = request.headers.get("x-tallied-client-ip", "").strip()
+        if forwarded_ip:
+            return forwarded_ip
+    if settings.trust_proxy_headers:
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded.strip():
             return forwarded.split(",")[0].strip()

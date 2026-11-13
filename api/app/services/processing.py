@@ -68,6 +68,7 @@ def render_pages(data: bytes) -> list[tuple[int, bytes, int, int]]:
 
 def initial_progress(total_files: int) -> dict:
     return {"stage": "queued", "documents_total": total_files, "documents_read": 0,
+            "files": {}, "preview": None,
             "checks": {cid: None for cid in CHECK_ORDER}}
 
 
@@ -90,6 +91,7 @@ def process_check(check_id: str, folder: Path, uploads: list[SavedUpload], rent:
                 log.info("check.file_unreadable code=%s", err.code)
                 entry["error"] = {"code": err.code, "message": err.message}
                 files.append(entry)
+                progress["files"][upload.key] = {"status": "unreadable", **entry["error"]}
             else:
                 pages = render_pages(data)
                 with session_scope() as s:
@@ -100,6 +102,9 @@ def process_check(check_id: str, folder: Path, uploads: list[SavedUpload], rent:
                              images=[{"page": n, "width": w, "height": h} for n, _, w, h in pages])
                 files.append(entry)
                 docs.append(DocumentInput(upload.key, result))
+                progress["files"][upload.key] = {"status": "read"}
+                if progress["preview"] is None and pages:
+                    progress["preview"] = {"file": upload.key, "page": 1}
             finally:
                 del data
             progress["documents_read"] += 1

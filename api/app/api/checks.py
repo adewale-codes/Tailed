@@ -102,6 +102,10 @@ def get_progress(check_id: str) -> dict:
         "stage": progress.get("stage", check.status),
         "documents": {"read": progress.get("documents_read", 0),
                       "total": progress.get("documents_total", check.file_count)},
+        # Per-file outcome by upload number ("1", "2"...). Never filenames or contents.
+        "files": [{"key": str(n), **progress.get("files", {}).get(str(n), {"status": "pending"})}
+                  for n in range(1, check.file_count + 1)],
+        "preview": progress.get("preview"),
         "checks": [{"id": cid, "number": n, "label": CHECK_LABELS[cid],
                     "done": statuses.get(cid) is not None, "status": statuses.get(cid)}
                    for n, cid in enumerate(CHECK_ORDER, start=1)],

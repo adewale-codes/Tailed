@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     rate_limit_salt: str = "change-me"
     # Only trust X-Forwarded-For when running behind a proxy you control (e.g. Railway).
     trust_proxy_headers: bool = False
+    # Shared secret between the web app's server-side proxy and this API. When a request carries
+    # it in X-Tallied-Proxy-Secret, X-Tallied-Client-IP is trusted as the user's real IP.
+    web_proxy_secret: str = ""
     # Uploads are written only under this folder, and deleted when processing ends.
     upload_temp_dir: str = str(Path(tempfile.gettempdir()) / "tallied-uploads")
     cleanup_interval_minutes: int = 10

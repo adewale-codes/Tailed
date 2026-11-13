@@ -65,7 +65,18 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The home page shows whether it can reach the API.
+Open http://localhost:3000 (the API must be running too).
+
+- `/` is the upload screen. `/check/[id]` shows the live checks. `/report/[id]` is a placeholder until
+  the report screen is built.
+- The browser only ever calls this app's own `/api/checks...` routes. They forward to the API from the
+  server, so `API_URL` and `WEB_PROXY_SECRET` (in `web/.env.local`) never reach the browser.
+- Set the same `WEB_PROXY_SECRET` in `api/.env` so the API rate-limits each visitor rather than the web
+  server. On Vercel the visitor's IP comes from Vercel's `x-real-ip`. Elsewhere, only set
+  `TRUST_FORWARDED_FOR=true` behind a proxy that overwrites `X-Forwarded-For`. Locally, every check
+  counts against one shared limit.
+- Design tokens (colours and fonts) live in `web/tailwind.config.mts`. Use the names (`bg-canvas`,
+  `text-ink`, `bg-accent`, `text-closer`...), never hex values.
 
 ## Fixtures
 

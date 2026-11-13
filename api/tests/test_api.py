@@ -35,6 +35,7 @@ def settings(db, tmp_path, monkeypatch):
     monkeypatch.setattr(s, "companies_house_api_key", "")   # employer_real -> not_checked
     monkeypatch.setattr(s, "checks_per_ip_per_day", 3)
     monkeypatch.setattr(s, "trust_proxy_headers", False)
+    monkeypatch.setattr(s, "web_proxy_secret", "")
     monkeypatch.setattr(s, "max_files", 12)
     monkeypatch.setattr(s, "max_file_mb", 10)
     monkeypatch.setattr(s, "ai_daily_call_cap", 200)
@@ -138,6 +139,12 @@ def test_progress_reports_each_check(client, settings, monkeypatch) -> None:
 def test_one_unreadable_file_is_reported_not_fatal(client, settings) -> None:
     files = fixture_files() + [("files", ("broken.pdf", b"%PDF-1.7 not really", "application/pdf"))]
     check_id = upload(client, files).json()["id"]
+    progress = client.get(f"/checks/{check_id}/progress").json()
+    assert [f["status"] for f in progress["files"]] == ["read"] * 5 + ["unreadable"]
+    assert progress["files"][5] == {"key": "6", "status": "unreadable", "code": "unreadable_file",
+                                    "message": progress["files"][5]["message"]}
+    assert progress["preview"] == {"file": "1", "page": 1}
+    assert "broken.pdf" not in json.dumps(progress)
     body = client.get(f"/checks/{check_id}").json()
     broken = next(f for f in body["files"] if f["name"] == "broken.pdf")
     assert broken["error"]["code"] == "unreadable_file"
@@ -418,6 +425,22 @@ def test_forwarded_for_used_behind_trusted_proxy(client, settings, monkeypatch) 
         assert upload(client, headers={"X-Forwarded-For": "203.0.113.5"}).status_code == 202
     assert upload(client, headers={"X-Forwarded-For": "203.0.113.5"}).status_code == 429
     assert upload(client, headers={"X-Forwarded-For": "203.0.113.6, 10.0.0.1"}).status_code == 202
+
+
+def test_web_proxy_client_ip_trusted_only_with_secret(client, settings, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "web_proxy_secret", "s3cret-value")
+    good = {"X-Tallied-Proxy-Secret": "s3cret-value"}
+    for _ in range(3):
+        assert upload(client, headers={**good, "X-Tallied-Client-IP": "198.51.100.7"}).status_code == 202
+    assert upload(client, headers={**good, "X-Tallied-Client-IP": "198.51.100.7"}).status_code == 429
+    # A different user behind the same web server gets their own allowance.
+    assert upload(client, headers={**good, "X-Tallied-Client-IP": "198.51.100.8"}).status_code == 202
+    # Without the right secret the header is ignored, so callers can't spoof a fresh IP.
+    bad = {"X-Tallied-Proxy-Secret": "wrong", "X-Tallied-Client-IP": "198.51.100.9"}
+    assert upload(client, headers=bad).status_code == 202  # counts against the socket IP
+    for _ in range(2):
+        upload(client, headers=bad)
+    assert upload(client, headers={"X-Tallied-Client-IP": "198.51.100.10"}).status_code == 429
 
 
 def test_rate_limit_resets_next_day(client, settings, db) -> None:

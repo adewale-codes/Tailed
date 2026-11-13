@@ -1,49 +1,18 @@
-"use client";
-
-import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
-type ApiStatus = "checking" | "ok" | "unreachable";
+import { UploadForm } from "@/components/upload-form";
 
 export default function Home() {
-  const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
-
-  useEffect(() => {
-    fetch(`${API_URL}/health`)
-      .then((res) => setApiStatus(res.ok ? "ok" : "unreachable"))
-      .catch(() => setApiStatus("unreachable"));
-  }, []);
-
   return (
-    <main className="flex flex-1 items-center justify-center bg-slate-50 px-4">
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="max-w-lg text-center"
-      >
-        <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Tallied</h1>
-        <p className="mt-4 text-lg text-slate-600">
-          Upload a tenant&apos;s bank statements and payslips and see, in plain English, whether
-          the story adds up.
-        </p>
-        <p className="mt-8 text-sm text-slate-500">
-          API status:{" "}
-          <span
-            className={
-              apiStatus === "ok"
-                ? "text-emerald-600"
-                : apiStatus === "unreachable"
-                  ? "text-rose-600"
-                  : "text-slate-500"
-            }
-          >
-            {apiStatus}
-          </span>
-        </p>
-      </motion.div>
-    </main>
+    <div>
+      <h1 className="text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
+        Does the tenant&apos;s story add up?
+      </h1>
+      <p className="mt-3 max-w-xl text-lg text-muted">
+        Upload their bank statements and payslips. We run six checks and explain what we found in
+        plain English. It&apos;s free, and you don&apos;t need an account.
+      </p>
+      <div className="mt-8 rounded-2xl border border-line bg-surface p-5 sm:p-8">
+        <UploadForm />
+      </div>
+    </div>
   );
 }
