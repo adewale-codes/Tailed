@@ -6,6 +6,8 @@ Privacy by design:
 - No IP addresses are stored anywhere: `rate_limits` keys on a salted hash.
 - Feedback has no foreign key to `checks`, and emails live in their own table, so deleting a
   report never deletes or exposes them, and a report never contains them.
+- `events` is cookie-free product analytics: an event name, a time and a salted hash of the
+  check id (so a funnel can be counted per check). No IP, user agent, cookie or document data.
 """
 
 from __future__ import annotations
@@ -98,6 +100,22 @@ class Feedback(Base):
     vote: Mapped[str] = mapped_column(String(4))
     comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     verdict: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Answer to the follow-up question shown after the vote (one of a few fixed choices).
+    follow_up: Mapped[str | None] = mapped_column(String(64), nullable=True)
     contact_id: Mapped[int | None] = mapped_column(
         ForeignKey("feedback_contacts.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Event(Base):
+    """One analytics event. See the module docstring for what is (and isn't) stored."""
+
+    __tablename__ = "events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(32), index=True)
+    check_ref: Mapped[str] = mapped_column(String(32), index=True)
+    # Small fixed vocabulary only (e.g. the verdict or the vote), never free text.
+    detail: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                                 index=True)

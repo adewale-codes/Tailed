@@ -25,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           Skip to content
         </a>
         <header className="border-b border-line bg-canvas">
-          <div className="mx-auto flex h-16 w-full max-w-3xl items-center justify-between px-4 sm:px-6">
+          <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4 sm:px-6">
             <Link href="/" className="font-serif text-2xl font-semibold tracking-tight text-ink">
               Tallied
             </Link>
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         </header>
         <MotionProvider>
-          <main id="main" className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
+          <main id="main" className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6 sm:py-12">
             {children}
           </main>
         </MotionProvider>

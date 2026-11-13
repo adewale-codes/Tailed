@@ -17,6 +17,7 @@ from app.checks.models import CHECK_ORDER
 from app.config import get_settings
 from app.db.models import Check, Feedback, FeedbackContact, PageImage
 from app.db.session import session_scope
+from app.services import analytics
 from app.services.errors import ApiError
 from app.services.limits import checks_used_today, client_ip, consume_check, ip_hash, new_check_id
 from app.services.processing import CHECK_LABELS, initial_progress, process_check
@@ -85,6 +86,7 @@ async def create_check(
         shutil.rmtree(folder, ignore_errors=True)
         raise
 
+    analytics.record("check_started", check_id)
     background.add_task(process_check, check_id, folder, uploads, rent)
     return {"id": check_id, "status": "queued",
             "progress_url": f"/checks/{check_id}/progress", "report_url": f"/checks/{check_id}",
@@ -146,10 +148,22 @@ def get_page(check_id: str, file_key: str, page: int) -> Response:
     return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
 
+# The follow-up question changes with the vote; answers are fixed choices, never free text.
+FOLLOW_UPS: dict[str, set[str]] = {
+    "up": {"verdict", "evidence", "affordability", "next_steps"},
+    "down": {"wrong_result", "hard_to_understand", "missed_something", "needed_something_else"},
+}
+
+
 class FeedbackIn(BaseModel):
     vote: Literal["up", "down"]
+    follow_up: str | None = Field(default=None, max_length=64)
     comment: str | None = Field(default=None, max_length=2000)
     email: str | None = Field(default=None, max_length=320)
+
+
+class EventIn(BaseModel):
+    name: Literal["report_viewed", "evidence_opened"]
 
 
 @router.post("/{check_id}/feedback", status_code=201)
@@ -158,6 +172,8 @@ def post_feedback(check_id: str, body: FeedbackIn) -> dict:
     email = (body.email or "").strip() or None
     if email and not EMAIL_RE.match(email):
         raise ApiError("invalid_email")
+    if body.follow_up is not None and body.follow_up not in FOLLOW_UPS[body.vote]:
+        raise ApiError("invalid_feedback")
     verdict = (check.report or {}).get("report", {}).get("verdict")
     with session_scope() as s:
         contact = None
@@ -165,6 +181,18 @@ def post_feedback(check_id: str, body: FeedbackIn) -> dict:
             contact = FeedbackContact(email=email)
             s.add(contact)
             s.flush()
-        s.add(Feedback(check_id=check_id, vote=body.vote, comment=(body.comment or "").strip() or None,
+        s.add(Feedback(check_id=check_id, vote=body.vote, follow_up=body.follow_up,
+                       comment=(body.comment or "").strip() or None,
                        verdict=verdict, contact_id=contact.id if contact else None))
+    analytics.record("feedback_sent", check_id, body.vote)
+    if email:
+        analytics.record("email_left", check_id)
     return {"ok": True}
+
+
+@router.post("/{check_id}/events", status_code=204)
+def post_event(check_id: str, body: EventIn) -> Response:
+    """Cookie-free analytics from the web app: report viewed, evidence opened."""
+    _load(check_id)
+    analytics.record(body.name, check_id)
+    return Response(status_code=204)

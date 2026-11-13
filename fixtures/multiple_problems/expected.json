@@ -1,0 +1,136 @@
+{
+  "case": "multiple_problems",
+  "synthetic": true,
+  "description": "The bad_payslip payslips (gross \u00a34,600, tax \u00a3310, NI \u00a395) with statements that match their \u00a33,965.00 net pay, plus the edited_balance change: the first balance on 12 Oct 2026 is \u00a3900 too high, in a different font. Two separate red flags, one of them a balance that doesn't add up, so the verdict is high_risk.",
+  "expected_verdict": "high_risk",
+  "expected_checks": {
+    "balances_add_up": "flag",
+    "documents_agree": "pass",
+    "payslip_realistic": "flag",
+    "employer_real": "not_asserted",
+    "looks_like_real_life": "pass",
+    "names_match": "pass"
+  },
+  "expected_flags": [
+    {
+      "check": "balances_add_up",
+      "kind": "balance_mismatch",
+      "file": "statement_2026-10.pdf",
+      "date": "2026-10-12",
+      "description": "PUREGYM LTD",
+      "balance_shown": "4959.61",
+      "balance_expected": "4059.61",
+      "difference": "900.00"
+    },
+    {
+      "check": "payslip_realistic",
+      "kind": "tax_ni_out",
+      "file": "payslip_2026-09.pdf",
+      "gross": "4600.00",
+      "tax_shown": "310.00",
+      "ni_shown": "95.00"
+    },
+    {
+      "check": "payslip_realistic",
+      "kind": "tax_ni_out",
+      "file": "payslip_2026-10.pdf",
+      "gross": "4600.00",
+      "tax_shown": "310.00",
+      "ni_shown": "95.00"
+    }
+  ],
+  "notes": [],
+  "truth": {
+    "account_holder": "Jordan A Hayes",
+    "sort_code": "60-91-23",
+    "account_number": "71839264",
+    "bank": "Northgate Bank",
+    "employer": "Brightwater Logistics Ltd",
+    "pay_day": 27,
+    "statements": [
+      {
+        "file": "statement_2026-08.pdf",
+        "period_start": "2026-08-01",
+        "period_end": "2026-08-31",
+        "statement_date": "2026-09-01",
+        "opening_balance": "2486.73",
+        "money_in": "3987.50",
+        "money_out": "2426.35",
+        "closing_balance_true": "4047.88",
+        "closing_balance_shown": "4047.88",
+        "transaction_count": 52,
+        "salary_credits": [
+          {
+            "date": "2026-08-27",
+            "amount": "3965.00",
+            "description": "BRIGHTWATER LOGISTI SALARY"
+          }
+        ]
+      },
+      {
+        "file": "statement_2026-09.pdf",
+        "period_start": "2026-09-01",
+        "period_end": "2026-09-30",
+        "statement_date": "2026-10-01",
+        "opening_balance": "4047.88",
+        "money_in": "3990.00",
+        "money_out": "2413.21",
+        "closing_balance_true": "5624.67",
+        "closing_balance_shown": "5624.67",
+        "transaction_count": 52,
+        "salary_credits": [
+          {
+            "date": "2026-09-27",
+            "amount": "3965.00",
+            "description": "BRIGHTWATER LOGISTI SALARY"
+          }
+        ]
+      },
+      {
+        "file": "statement_2026-10.pdf",
+        "period_start": "2026-10-01",
+        "period_end": "2026-10-31",
+        "statement_date": "2026-11-01",
+        "opening_balance": "5624.67",
+        "money_in": "3983.00",
+        "money_out": "2271.37",
+        "closing_balance_true": "7336.30",
+        "closing_balance_shown": "8236.30",
+        "transaction_count": 52,
+        "salary_credits": [
+          {
+            "date": "2026-10-27",
+            "amount": "3965.00",
+            "description": "BRIGHTWATER LOGISTI SALARY"
+          }
+        ]
+      }
+    ],
+    "payslips": [
+      {
+        "file": "payslip_2026-09.pdf",
+        "employee_name": "Jordan A Hayes",
+        "pay_date": "2026-09-27",
+        "tax_period": 6,
+        "tax_code": "1257L",
+        "gross": "4600.00",
+        "tax": "310.00",
+        "ni": "95.00",
+        "pension": "230.00",
+        "net": "3965.00"
+      },
+      {
+        "file": "payslip_2026-10.pdf",
+        "employee_name": "Jordan A Hayes",
+        "pay_date": "2026-10-27",
+        "tax_period": 7,
+        "tax_code": "1257L",
+        "gross": "4600.00",
+        "tax": "310.00",
+        "ni": "95.00",
+        "pension": "230.00",
+        "net": "3965.00"
+      }
+    ]
+  }
+}

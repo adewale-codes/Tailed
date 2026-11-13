@@ -956,10 +956,62 @@ def case_edited_metadata() -> Case:
     )
 
 
+def case_multiple_problems() -> Case:
+    """Two independent red flags: an edited balance and payslip tax/NI that can't be right."""
+    gross = money("4600.00")
+    slips = build_payslips(APPLICANT, gross, tax=money("310.00"), ni=money("95.00"))
+    statements = build_statements(slips[0].net)
+    oct_stmt = statements[2]
+    bump = money("900.00")
+    edited_index = next(i for i, t in enumerate(oct_stmt.txs) if t.day == date(2026, 10, 12))
+    edited = oct_stmt.txs[edited_index]
+    true_balance = edited.balance
+    for t in oct_stmt.txs[edited_index:]:
+        t.balance += bump
+    edited.font = EDIT_FONT
+    oct_stmt.closing_shown = oct_stmt.true_closing + bump
+    return Case(
+        name="multiple_problems",
+        description="The bad_payslip payslips (gross £4,600, tax £310, NI £95) with statements "
+                    "that match their £3,965.00 net pay, plus the edited_balance change: the first "
+                    "balance on 12 Oct 2026 is £900 too high, in a different font. Two separate "
+                    "red flags, one of them a balance that doesn't add up, so the verdict is "
+                    "high_risk.",
+        statements=statements,
+        payslips=slips,
+        holder=APPLICANT,
+        expected_verdict="high_risk",
+        expected_checks=all_pass(balances_add_up="flag", payslip_realistic="flag"),
+        expected_flags=[
+            {
+                "check": "balances_add_up",
+                "kind": "balance_mismatch",
+                "file": statement_file(oct_stmt),
+                "date": "2026-10-12",
+                "description": edited.description,
+                "balance_shown": str(edited.balance),
+                "balance_expected": str(true_balance),
+                "difference": str(bump),
+            },
+            *[
+                {
+                    "check": "payslip_realistic",
+                    "kind": "tax_ni_out",
+                    "file": payslip_file(s),
+                    "gross": str(s.gross),
+                    "tax_shown": str(s.tax),
+                    "ni_shown": str(s.ni),
+                }
+                for s in slips
+            ],
+        ],
+    )
+
+
 CASES = [case_genuine, case_edited_balance, case_salary_mismatch, case_bad_payslip,
-         case_name_mismatch, case_edited_metadata]
+         case_name_mismatch, case_edited_metadata, case_multiple_problems]
 CASE_NAMES = ["genuine", "edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
-              "edited_metadata"]
+              "edited_metadata", "multiple_problems"]
 
 
 # ---------------------------------------------------------------------------

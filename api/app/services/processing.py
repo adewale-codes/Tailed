@@ -27,6 +27,7 @@ from app.db.session import session_scope
 from app.reader import ReaderError, read_document
 from app.reader.filetype import sniff
 from app.report.wording import apply_wording
+from app.services import analytics
 from app.services.uploads import SavedUpload
 
 log = logging.getLogger(__name__)
@@ -119,6 +120,7 @@ def process_check(check_id: str, folder: Path, uploads: list[SavedUpload], rent:
             _update(check_id, status="failed", error_code=code, error_message=message,
                     progress={**progress, "stage": "failed"})
             log.info("check.failed code=%s ms=%d", code, (time.perf_counter() - started) * 1000)
+            analytics.record("check_failed", check_id, code)
             return
 
         progress["stage"] = "checking"
@@ -138,11 +140,13 @@ def process_check(check_id: str, folder: Path, uploads: list[SavedUpload], rent:
         progress["stage"] = "done"
         _update(check_id, status="done", progress=progress,
                 report={"files": files, "report": report.model_dump(mode="json")})
+        analytics.record("check_finished", check_id, report.verdict)
         log.info("check.done verdict=%s flags=%s ms=%d", report.verdict,
                  ",".join(c.id for c in report.checks if c.status == "flag") or "none",
                  (time.perf_counter() - started) * 1000)
     except Exception as exc:
         log.error("check.error type=%s", type(exc).__name__)
+        analytics.record("check_failed", check_id, "internal_error")
         try:
             _update(check_id, status="failed", error_code="internal_error",
                     error_message="Something went wrong while checking these documents. "

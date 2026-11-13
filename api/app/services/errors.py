@@ -19,7 +19,7 @@ MESSAGES: dict[str, tuple[int, str]] = {
     "check_expired": (410, "This report has been deleted. We delete every report and its "
                            "documents 24 hours after the check, to protect the tenant's privacy."),
     "page_not_found": (404, "We couldn't find that page."),
-    "invalid_feedback": (400, "Please choose thumbs up or thumbs down."),
+    "invalid_feedback": (400, "Please choose one of the options shown."),
     "invalid_email": (400, "That email address doesn't look right."),
     "invalid_request": (400, "Something in the request wasn't right. Please try again."),
     "not_found": (404, "There's nothing here."),

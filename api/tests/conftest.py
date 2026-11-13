@@ -45,6 +45,6 @@ def db(migrated_db: str) -> Iterator[str]:
     engine = create_engine(migrated_db)
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE checks, page_images, rate_limits, ai_usage, feedback, "
-                          "feedback_contacts RESTART IDENTITY CASCADE"))
+                          "feedback_contacts, events RESTART IDENTITY CASCADE"))
     engine.dispose()
     yield migrated_db

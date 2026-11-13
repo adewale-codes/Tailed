@@ -36,7 +36,8 @@ http://localhost:8000/docs.
 | GET | `/checks/{id}/progress` | Which of the six checks are done (poll this) |
 | GET | `/checks/{id}` | The finished report (202 while processing, 410 after 24 hours) |
 | GET | `/checks/{id}/pages/{file}/{page}.png` | Rendered page image for the evidence view |
-| POST | `/checks/{id}/feedback` | `{"vote": "up"\|"down", "comment"?, "email"?}` |
+| POST | `/checks/{id}/feedback` | `{"vote": "up"\|"down", "follow_up"?, "comment"?, "email"?}` |
+| POST | `/checks/{id}/events` | `{"name": "report_viewed"\|"evidence_opened"}` (analytics, no cookies) |
 
 ```bash
 curl -F files=@fixtures/genuine/statement_2026-08.pdf -F files=@fixtures/genuine/payslip_2026-09.pdf \
@@ -67,8 +68,8 @@ npm run dev
 
 Open http://localhost:3000 (the API must be running too).
 
-- `/` is the upload screen. `/check/[id]` shows the live checks. `/report/[id]` is a placeholder until
-  the report screen is built.
+- `/` is the upload screen. `/check/[id]` shows the live checks. `/report/[id]` is the report, and
+  `/report/[id]/evidence/[findingId]` shows each finding highlighted on the page image.
 - The browser only ever calls this app's own `/api/checks...` routes. They forward to the API from the
   server, so `API_URL` and `WEB_PROXY_SECRET` (in `web/.env.local`) never reach the browser.
 - Set the same `WEB_PROXY_SECRET` in `api/.env` so the API rate-limits each visitor rather than the web
@@ -83,6 +84,17 @@ Open http://localhost:3000 (the API must be running too).
 ```bash
 cd api
 uv run python ../fixtures/generate.py
+```
+
+## Analytics
+
+Cookie-free and self-hosted: an `events` table holding an event name, a time and a salted hash of
+the check id. There's no IP address, user agent, cookie or document data. Events: check started,
+finished (or failed), report viewed, evidence opened, feedback sent and email left. To see the funnel:
+
+```bash
+cd api
+uv run python scripts/funnel.py --days 30
 ```
 
 ## Privacy rules

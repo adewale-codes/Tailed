@@ -51,16 +51,28 @@ class Evidence(BaseModel):
     details: dict[str, str] = Field(
         default_factory=dict, description="Names, dates and descriptions. Never sent to the AI.")
 
+    primary: int = Field(default=0, description="Index in `bboxes` of the line this finding is "
+                                                 "about. Any other boxes are context.")
+
     @classmethod
     def at(cls, kind: str, file: str | None, locations: list[Location | None], *, flag: bool,
            numbers: dict[str, Decimal] | None = None,
-           details: dict[str, str] | None = None) -> Evidence:
+           details: dict[str, str] | None = None, focus: int = 0) -> Evidence:
+        """`locations[focus]` is the line the finding is about. The page is that line's page, and
+        only boxes on the same page are kept (the others can't be drawn on it)."""
         locs = [loc for loc in locations if loc is not None]
+        key = locations[focus] if 0 <= focus < len(locations) else None
+        if key is None and locs:
+            key = locs[0]
+        if key is None:
+            return cls(kind=kind, flag=flag, file=file, numbers=numbers or {},
+                       details=details or {})
+        same_page = [loc for loc in locs if loc.page == key.page]
         return cls(
-            kind=kind, flag=flag, file=file,
-            page=locs[0].page if locs else None,
-            bboxes=[loc.bbox for loc in locs if loc.page == locs[0].page] if locs else [],
-            approximate=any(loc.approximate for loc in locs),
+            kind=kind, flag=flag, file=file, page=key.page,
+            bboxes=[loc.bbox for loc in same_page],
+            primary=next(i for i, loc in enumerate(same_page) if loc is key),
+            approximate=any(loc.approximate for loc in same_page),
             numbers=numbers or {}, details=details or {},
         )
 

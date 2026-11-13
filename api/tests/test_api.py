@@ -15,7 +15,7 @@ from sqlalchemy import create_engine, text
 from app.checks.companies_house import CompanyRecord, StaticCompanies
 from app.config import get_settings
 from app.main import app
-from app.services import processing
+from app.services import analytics, processing
 from app.services.cleanup import run_cleanup
 from app.services.limits import new_check_id, reserve_ai_call
 
@@ -378,6 +378,8 @@ def test_feedback_emails_survive_report_deletion_and_are_never_exposed(client, s
 
 @pytest.mark.parametrize("body, code", [
     ({"vote": "sideways"}, "invalid_feedback"),
+    ({"vote": "up", "follow_up": "wrong_result"}, "invalid_feedback"),  # a "down" answer
+    ({"vote": "down", "follow_up": "anything at all"}, "invalid_feedback"),
     ({}, "invalid_feedback"),
     ({"vote": "up", "email": "not-an-email"}, "invalid_email"),
 ])
@@ -391,6 +393,59 @@ def test_feedback_without_email(client, settings, db) -> None:
     check_id = upload(client).json()["id"]
     assert client.post(f"/checks/{check_id}/feedback", json={"vote": "up"}).status_code == 201
     assert sql(db, "SELECT count(*) FROM feedback_contacts")[0][0] == 0
+
+
+def test_feedback_follow_up_is_stored(client, settings, db) -> None:
+    check_id = upload(client).json()["id"]
+    res = client.post(f"/checks/{check_id}/feedback",
+                      json={"vote": "down", "follow_up": "hard_to_understand", "comment": "Too long"})
+    assert res.status_code == 201
+    assert sql(db, "SELECT vote, follow_up, comment FROM feedback") == [
+        ("down", "hard_to_understand", "Too long")]
+
+
+# ---------------------------------------------------------------------------
+# Analytics (cookie-free events table)
+# ---------------------------------------------------------------------------
+
+
+def test_funnel_events_recorded_and_anonymous(client, settings, db) -> None:
+    first = upload(client).json()["id"]
+    second = upload(client).json()["id"]
+    upload(client, [("files", ("broken.pdf", b"%PDF-1.7 not really", "application/pdf"))])
+    for name in ["report_viewed", "report_viewed", "evidence_opened"]:
+        assert client.post(f"/checks/{first}/events", json={"name": name}).status_code == 204
+    client.post(f"/checks/{second}/events", json={"name": "report_viewed"})
+    client.post(f"/checks/{first}/feedback", json={"vote": "up", "email": "a@example.com"})
+
+    funnel = {r["step"]: r["checks"] for r in analytics.funnel()}
+    assert funnel == {"check_started": 3, "check_finished": 2, "report_viewed": 2,
+                      "evidence_opened": 1, "feedback_sent": 1, "email_left": 1}
+    assert sql(db, "SELECT detail FROM events WHERE name = 'check_failed'") == [("unreadable_file",)]
+    assert sql(db, "SELECT detail FROM events WHERE name = 'check_finished'") == [
+        ("looks_good",), ("looks_good",)]
+    # Nothing in the table can identify a check, a person or a document.
+    dump = str(sql(db, "SELECT * FROM events"))
+    for secret in [first, second, "a@example.com", "testclient", "127.0.0.1"]:
+        assert secret not in dump
+    assert sql(db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'events' "
+                   "ORDER BY ordinal_position") == [("id",), ("name",), ("check_ref",), ("detail",),
+                                                     ("created_at",)]
+
+
+def test_client_events_are_limited_to_known_names(client, settings) -> None:
+    check_id = upload(client).json()["id"]
+    for name in ["check_finished", "feedback_sent", "anything"]:
+        res = client.post(f"/checks/{check_id}/events", json={"name": name})
+        assert res.status_code == 400 and res.json()["error"]["code"] == "invalid_request"
+    assert client.post(f"/checks/{'x' * 43}/events", json={"name": "report_viewed"}).status_code == 404
+
+
+def test_old_events_are_deleted_by_cleanup(client, settings, db) -> None:
+    upload(client)
+    sql(db, "UPDATE events SET created_at = created_at - interval '401 days'")
+    run_cleanup()
+    assert sql(db, "SELECT count(*) FROM events")[0][0] == 0
 
 
 # ---------------------------------------------------------------------------

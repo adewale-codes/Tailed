@@ -2,7 +2,7 @@ import { UploadForm } from "@/components/upload-form";
 
 export default function Home() {
   return (
-    <div>
+    <div className="mx-auto max-w-3xl">
       <h1 className="text-3xl font-semibold leading-tight tracking-tight text-ink sm:text-4xl">
         Does the tenant&apos;s story add up?
       </h1>

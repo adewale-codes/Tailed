@@ -39,7 +39,7 @@ def check_balances(docs: list[DocumentInput]) -> CheckResult:
             diff = t.balance - expected
             if abs(diff) > TOLERANCE:
                 evidence.append(Evidence.at(
-                    "balance_mismatch", doc.file, [prev_location, t.location], flag=True,
+                    "balance_mismatch", doc.file, [prev_location, t.location], flag=True, focus=1,
                     numbers={"previous_balance": previous, "paid_in": t.paid_in or Decimal(0),
                              "paid_out": t.paid_out or Decimal(0), "expected": expected,
                              "shown": t.balance, "difference": diff},

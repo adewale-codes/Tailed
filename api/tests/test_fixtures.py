@@ -13,7 +13,7 @@ from pypdf import PdfReader
 REPO_ROOT = Path(__file__).resolve().parents[2]
 GENERATOR = REPO_ROOT / "fixtures" / "generate.py"
 CASES = ["genuine", "edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
-         "edited_metadata"]
+         "edited_metadata", "multiple_problems"]
 CHECK_IDS = {"balances_add_up", "documents_agree", "payslip_realistic", "employer_real",
              "looks_like_real_life", "names_match"}
 

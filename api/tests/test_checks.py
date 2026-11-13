@@ -30,7 +30,7 @@ from app.report.wording import apply_wording, numbers_in
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 CASES = ["genuine", "edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
-         "edited_metadata"]
+         "edited_metadata", "multiple_problems"]
 RENT = Decimal("1100")
 REGISTRY = StaticCompanies([
     CompanyRecord(**r)
@@ -443,3 +443,29 @@ def test_live_wording_keeps_numbers() -> None:
                                          *after.display.next_steps]))
             assert shown <= _engine_numbers(before)
             print(f"[{case}] {after.id}: {after.display.title} | {after.display.explanation}")
+
+
+def test_evidence_points_at_the_flagged_line_even_across_a_page_break() -> None:
+    from app.checks.models import Evidence
+
+    prev = Location(page=1, bbox=BBox(x0=40, top=780, x1=550, bottom=790))
+    line = Location(page=2, bbox=BBox(x0=40, top=120, x1=550, bottom=130))
+    ev = Evidence.at("balance_mismatch", "5", [prev, line], flag=True, focus=1)
+    assert ev.page == 2 and ev.bboxes == [line.bbox] and ev.primary == 0
+
+    same_page = Location(page=2, bbox=BBox(x0=40, top=100, x1=550, bottom=110))
+    ev = Evidence.at("balance_mismatch", "5", [same_page, line], flag=True, focus=1)
+    assert ev.page == 2 and ev.bboxes == [same_page.bbox, line.bbox] and ev.primary == 1
+
+    ev = Evidence.at("modified_after_period", "5", [], flag=True)
+    assert ev.page is None and ev.bboxes == [] and ev.primary == 0
+
+
+def test_edited_balance_highlights_the_edited_line() -> None:
+    """The primary box of the balance finding is the 12 Oct line the fixture edited."""
+    report = run_checks(docs("edited_balance"), RENT, REGISTRY)
+    ev = next(e for c in report.checks for e in c.evidence if e.kind == "balance_mismatch")
+    font = next(e for c in report.checks for e in c.evidence if e.kind == "font_change")
+    # The edited line is the one drawn in a different font: same page and same box.
+    assert ev.page == font.page and ev.bboxes[ev.primary] == font.bboxes[0]
+    assert str(ev.numbers["shown"]) == expected("edited_balance")["expected_flags"][0]["balance_shown"]

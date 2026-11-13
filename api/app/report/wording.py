@@ -68,13 +68,13 @@ HEADLINES = {
         title="Some things need a closer look",
         explanation="At least one check found something worth asking the tenant about. It isn't "
                     "proof of anything wrong; there is often a simple explanation.",
-        next_steps=["Go through the flagged checks below and ask the tenant about each one."]),
+        next_steps=["Go through each flagged check and ask the tenant about it."]),
     "high_risk": Wording(
         title="Several serious problems found",
         explanation="The documents disagree with each other in more than one way. We'd recommend "
                     "not relying on them until the tenant can explain the differences.",
         next_steps=["Ask the tenant for documents straight from their bank and employer.",
-                    "Go through the flagged checks below with the tenant."]),
+                    "Go through each flagged check with the tenant."]),
 }
 
 SYSTEM_PROMPT = """You write the wording for a tenant-referencing report read by UK landlords and \

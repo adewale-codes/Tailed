@@ -23,7 +23,7 @@ from app.reader import read_document  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 CASES = ["genuine", "edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
-         "edited_metadata"]
+         "edited_metadata", "multiple_problems"]
 
 
 def main() -> int:

@@ -23,7 +23,7 @@ from pathlib import Path
 from sqlalchemy import delete, select, update
 
 from app.config import get_settings
-from app.db.models import AiUsage, Check, PageImage, RateLimit
+from app.db.models import AiUsage, Check, Event, PageImage, RateLimit
 from app.db.session import session_scope
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,8 @@ def run_cleanup(now: datetime | None = None) -> CleanupResult:
 
         s.execute(delete(RateLimit).where(RateLimit.day < (now - timedelta(days=2)).date()))
         s.execute(delete(AiUsage).where(AiUsage.day < (now - timedelta(days=90)).date()))
+        # Anonymous analytics: keep about a year for year-on-year comparison.
+        s.execute(delete(Event).where(Event.created_at < now - timedelta(days=400)))
 
     result.temp_folders_removed = remove_stale_uploads(now)
     log.info("cleanup.done wiped=%d tombstones=%d stuck=%d temp=%d", result.wiped,
