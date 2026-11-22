@@ -71,7 +71,7 @@ def test_fixture_verdicts(case: str) -> None:
     for c in report.checks:
         if want["expected_checks"][c.id] == "pass":
             assert c.status == "pass", (c.id, c.explanation)
-    assert [c.number for c in report.checks] == [1, 2, 3, 4, 5, 6]
+    assert [c.number for c in report.checks] == [1, 2, 3, 4, 5, 6, 7]
 
 
 def test_genuine_raises_zero_flags() -> None:
@@ -97,15 +97,55 @@ def test_edited_balance_evidence() -> None:
     assert len(mismatch[0].bboxes) == 2  # previous line and the edited line
     summary = next(e for e in c.evidence if e.kind == "summary_mismatch")
     assert summary.numbers["difference"] == Decimal("900.00")
-    font = next(e for e in c.evidence if e.kind == "font_change")
+
+
+# ---------------------------------------------------------------------------
+# Check 7: file_signals. A check only flags what it tested.
+# ---------------------------------------------------------------------------
+
+
+def test_balances_only_flag_arithmetic() -> None:
+    """Genuine figures with an edited PDF date: check 1 passes, check 7 flags."""
+    report = run_checks(docs("edited_metadata"), RENT, REGISTRY)
+    balances = check(report, "balances_add_up")
+    assert balances.status == "pass" and balances.evidence == []
+    signals = check(report, "file_signals")
+    assert signals.status == "flag" and signals.number == 7
+    assert signals.title == "This file was edited after it was issued"
+    assert [e.kind for e in signals.evidence] == ["modified_after_period"]
+    ev = signals.evidence[0]
+    assert ev.flag and ev.file == "statement_2026-10.pdf" and ev.details["producer"] == "iLovePDF"
+    assert report.verdict == "needs_a_closer_look"
+
+
+def test_signal_on_an_already_flagged_document_is_supporting_evidence() -> None:
+    """The edited balance's font change supports check 1 instead of counting as a second flag."""
+    report = run_checks(docs("edited_balance"), RENT, REGISTRY)
+    balances = check(report, "balances_add_up")
+    font = next(e for e in balances.evidence if e.kind == "font_change")
+    assert font.flag is False and font.file == "statement_2026-10.pdf"
     assert font.details["date"] == "2026-10-12" and "Vera" in font.details["font"]
+    assert "different font" in balances.explanation
+    signals = check(report, "file_signals")
+    assert signals.status == "pass" and signals.evidence == []
+    assert "Some balances don't add up" in signals.explanation
+    assert [c.id for c in report.checks if c.status == "flag"] == ["balances_add_up"]
+    assert report.verdict == "needs_a_closer_look"
 
 
-def test_edited_metadata_is_supporting_evidence() -> None:
-    c = check(run_checks(docs("edited_metadata"), RENT, REGISTRY), "balances_add_up")
-    assert [e.kind for e in c.evidence] == ["modified_after_period"]
-    assert c.evidence[0].details["producer"] == "iLovePDF"
-    assert c.evidence[0].file == "statement_2026-10.pdf"
+def test_signal_on_a_different_document_is_its_own_finding() -> None:
+    """A flag on the payslips doesn't absorb an editing signal on a statement."""
+    edited = {x.file: x for x in docs("edited_metadata")}["statement_2026-10.pdf"]
+    d = [edited if x.file == edited.file else x for x in docs("name_mismatch")]
+    report = run_checks(d, RENT, REGISTRY)
+    assert {c.id for c in report.checks if c.status == "flag"} == {"names_match", "file_signals"}
+    assert [e.file for e in check(report, "file_signals").evidence] == ["statement_2026-10.pdf"]
+    assert not any(e.kind == "modified_after_period" for e in check(report, "names_match").evidence)
+
+
+def test_genuine_files_have_no_signals() -> None:
+    signals = check(run_checks(docs("genuine"), RENT, REGISTRY), "file_signals")
+    assert signals.status == "pass" and signals.title == "No signs the files were edited"
 
 
 def test_penny_rounding_is_tolerated() -> None:

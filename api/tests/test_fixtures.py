@@ -15,7 +15,7 @@ GENERATOR = REPO_ROOT / "fixtures" / "generate.py"
 CASES = ["genuine", "edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
          "edited_metadata", "multiple_problems"]
 CHECK_IDS = {"balances_add_up", "documents_agree", "payslip_realistic", "employer_real",
-             "looks_like_real_life", "names_match"}
+             "looks_like_real_life", "names_match", "file_signals"}
 
 
 @pytest.fixture(scope="module")
@@ -59,7 +59,8 @@ def test_only_genuine_passes(out_dir: Path) -> None:
             assert data["expected_verdict"] == "looks_good" and not flagged
         else:
             assert data["expected_verdict"] != "looks_good" and flagged
-            assert {f["check"] for f in data["expected_flags"]} == flagged
+            # Supporting entries (a file signal shown with another check) aren't flags of their own.
+            assert {f["check"] for f in data["expected_flags"] if not f.get("supporting")} == flagged
 
 
 def _balance_rows(pdf_path: Path) -> list[tuple[str, Decimal]]:

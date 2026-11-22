@@ -82,7 +82,11 @@ def remove_stale_uploads(now: datetime) -> int:
     cutoff = (now - STALE_UPLOAD_AFTER).timestamp()
     removed = 0
     for folder in root.iterdir():
-        if folder.is_dir() and folder.stat().st_mtime < cutoff:
+        if not folder.is_dir():
+            continue
+        # Newest change anywhere in the folder: appending to a file doesn't touch the folder.
+        newest = max([folder.stat().st_mtime, *(p.stat().st_mtime for p in folder.iterdir())])
+        if newest < cutoff:
             shutil.rmtree(folder, ignore_errors=True)
             removed += 1
     return removed

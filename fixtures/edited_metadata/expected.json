@@ -4,16 +4,17 @@
   "description": "Genuine content, but the October statement's PDF metadata says it was modified by a consumer PDF editor (iLovePDF) on 09 Nov 2026, after the statement date.",
   "expected_verdict": "needs_a_closer_look",
   "expected_checks": {
-    "balances_add_up": "flag",
+    "balances_add_up": "pass",
     "documents_agree": "pass",
     "payslip_realistic": "pass",
     "employer_real": "not_asserted",
     "looks_like_real_life": "pass",
-    "names_match": "pass"
+    "names_match": "pass",
+    "file_signals": "flag"
   },
   "expected_flags": [
     {
-      "check": "balances_add_up",
+      "check": "file_signals",
       "kind": "modified_after_period",
       "file": "statement_2026-10.pdf",
       "producer": "iLovePDF",

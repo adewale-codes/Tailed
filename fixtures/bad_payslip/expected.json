@@ -9,7 +9,8 @@
     "payslip_realistic": "flag",
     "employer_real": "not_asserted",
     "looks_like_real_life": "pass",
-    "names_match": "pass"
+    "names_match": "pass",
+    "file_signals": "pass"
   },
   "expected_flags": [
     {

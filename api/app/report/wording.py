@@ -57,6 +57,10 @@ NEXT_STEPS: dict[str, dict[str, list[str]]] = {
     "names_match": {
         "flag": ["Ask the tenant to explain why the names differ, for example a recent name change."],
     },
+    "file_signals": {
+        "flag": ["Ask the tenant to download the flagged document again directly from their bank or "
+                 "payroll portal, and send it to you without opening it in any other app."],
+    },
 }
 
 HEADLINES = {

@@ -18,11 +18,11 @@ Each folder has 3 statements (Aug to Oct 2026), 2 payslips (Sep and Oct 2026) an
 | Folder | What's wrong | Checks that should flag | Verdict |
 |---|---|---|---|
 | `genuine/` | Nothing. £2,650.00 net salary on the 27th, balances add up | none | `looks_good` |
-| `edited_balance/` | First balance on 12 Oct is £900 too high, carried to every later line and the summary closing balance. That line uses Vera instead of Helvetica | `balances_add_up` | `needs_a_closer_look` |
+| `edited_balance/` | First balance on 12 Oct is £900 too high, carried to every later line and the summary closing balance. That line uses Vera instead of Helvetica (a file signal, shown as supporting evidence on check 1) | `balances_add_up` | `needs_a_closer_look` |
 | `salary_mismatch/` | Statements show £2,650.00; payslips say net £3,100.64 (gross £4,190, tax £628.50, NI £251.36, pension £209.50) | `documents_agree` | `needs_a_closer_look` |
 | `bad_payslip/` | Gross £4,600 but tax £310 and NI £95, far too low. Totals add up and match the statements | `payslip_realistic` | `needs_a_closer_look` |
 | `name_mismatch/` | Statements: Jordan A Hayes. Payslips: Daniel K Okafor | `names_match` | `needs_a_closer_look` |
-| `edited_metadata/` | Content is genuine, but the October statement's PDF metadata says Producer `iLovePDF`, modified 9 Nov 2026 | `balances_add_up` | `needs_a_closer_look` |
+| `edited_metadata/` | Content is genuine, but the October statement's PDF metadata says Producer `iLovePDF`, modified 9 Nov 2026 | `file_signals` | `needs_a_closer_look` |
 | `multiple_problems/` | The `bad_payslip` payslips plus the `edited_balance` change (statements match the £3,965.00 net pay). Two separate red flags | `balances_add_up`, `payslip_realistic` | `high_risk` |
 
 ## expected.json
@@ -33,7 +33,8 @@ Each folder has 3 statements (Aug to Oct 2026), 2 payslips (Sep and Oct 2026) an
 - `truth`: the ground-truth figures (opening/closing balances, totals, salary credits, payslip fields)
 
 Check IDs: `balances_add_up`, `documents_agree`, `payslip_realistic`, `employer_real`,
-`looks_like_real_life`, `names_match`. `employer_real` is always `not_asserted` because the employer is
+`looks_like_real_life`, `names_match`, `file_signals`. A file signal on a document that another check
+already flags is shown there as supporting evidence (`"supporting": true` in `expected_flags`). `employer_real` is always `not_asserted` because the employer is
 fictional and won't be on Companies House (`companies_house.json` holds a synthetic record for local runs).
 
 Tax model used for `payslip_realistic` (2026/27, England, 1257L, NI category A, monthly): personal allowance

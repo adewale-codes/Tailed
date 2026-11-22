@@ -739,12 +739,14 @@ def write_metadata(path: Path, info: dict[str, str]) -> None:
 # ---------------------------------------------------------------------------
 
 CHECK_IDS = [
-    "balances_add_up",       # running balances and summary totals add up; PDF edit signals on statements
+    "balances_add_up",       # running balances and summary totals add up (arithmetic only)
     "documents_agree",       # salary credits on statements match payslip net pay
     "payslip_realistic",     # tax and NI plausible for gross pay, totals add up
     "employer_real",         # employer found on Companies House
     "looks_like_real_life",  # everyday spending present, no runs of identical round amounts
     "names_match",           # same person on statements and payslips
+    "file_signals",          # mixed fonts on a line, or a file changed after the date it covers.
+                             # On a document another check flags, shown there as supporting evidence.
 ]
 
 
@@ -818,7 +820,11 @@ def case_edited_balance() -> Case:
                 "closing_expected": str(oct_stmt.true_closing),
             },
             {
-                "check": "balances_add_up",
+                # Found by file_signals, but this document is already flagged by balances_add_up,
+                # so it's shown there as supporting evidence rather than as a second flag.
+                "check": "file_signals",
+                "shown_with": "balances_add_up",
+                "supporting": True,
                 "kind": "font_change",
                 "file": statement_file(oct_stmt),
                 "date": "2026-10-12",
@@ -939,10 +945,10 @@ def case_edited_metadata() -> Case:
         payslips=build_payslips(APPLICANT, GENUINE_GROSS),
         holder=APPLICANT,
         expected_verdict="needs_a_closer_look",
-        expected_checks=all_pass(balances_add_up="flag"),
+        expected_checks=all_pass(file_signals="flag"),
         expected_flags=[
             {
-                "check": "balances_add_up",
+                "check": "file_signals",
                 "kind": "modified_after_period",
                 "file": statement_file(oct_stmt),
                 "producer": EDITOR_PRODUCER,

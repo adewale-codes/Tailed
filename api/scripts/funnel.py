@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.services.analytics import funnel  # noqa: E402
+from app.services.analytics import funnel, votes  # noqa: E402
 
 LABELS = {
     "check_started": "Check started",
@@ -37,6 +37,11 @@ def main() -> int:
         pct = "" if r["pct_of_started"] is None else f"{r['pct_of_started']:5.1f}%"
         bar = "#" * round(30 * r["checks"] / top)
         print(f"{LABELS[r['step']]:<16} {r['checks']:>5}  {pct:>6}  {bar}")
+    v = votes(args.days)
+    total = v["up"] + v["down"]
+    share = f" ({100 * v['up'] / total:.0f}% useful)" if total else ""
+    print()
+    print(f"Was it useful?   Yes {v['up']}, Not really {v['down']}{share}")
     return 0
 
 

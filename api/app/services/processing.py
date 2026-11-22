@@ -1,4 +1,4 @@
-"""Background processing for one check: read -> render pages -> six checks -> wording -> save.
+"""Background processing for one check: read -> render pages -> seven checks -> wording -> save.
 
 The temp folder holding the uploads is deleted in a `finally`, whether processing succeeds or
 fails. Only the report and rendered page images are stored, and only until the check expires.
@@ -42,6 +42,7 @@ CHECK_LABELS = {
     "employer_real": "Employer is a real company",
     "looks_like_real_life": "Spending looks like everyday life",
     "names_match": "Names match",
+    "file_signals": "Files haven't been edited",
 }
 
 

@@ -9,12 +9,15 @@ import {
   type Report,
   type ReportState,
   type Verdict,
+  attachedSignals,
   checkWording,
+  describe,
   findingsOf,
   gbp,
   loadReport,
   track,
 } from "@/lib/report";
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { FeedbackForm } from "./feedback-form";
 import { AlertIcon, DashIcon, Spinner, TickIcon } from "./icons";
 import { ReportProblem } from "./report-problem";
@@ -72,7 +75,10 @@ function ReportView({ report }: { report: Report }) {
   const findings = findingsOf(report);
   const flagged = checks.filter((c) => c.status === "flag");
   const notChecked = checks.filter((c) => c.status === "not_checked");
-  const passed = checks.filter((c) => c.status === "pass");
+  // When every sign of editing sits on a document another check flagged, check 7 passes and its
+  // signals are shown on that check's card. Don't also list it under "What looks fine".
+  const signalsShownAbove = flagged.some((c) => attachedSignals(c).length > 0);
+  const passed = checks.filter((c) => c.status === "pass" && !(c.id === "file_signals" && signalsShownAbove));
   const steps = nextSteps(report);
   const v = VERDICTS[verdict];
   const uid = useId();
@@ -92,8 +98,8 @@ function ReportView({ report }: { report: Report }) {
         {summary?.explanation ? <p className="mt-3 max-w-2xl text-lg text-ink">{summary.explanation}</p> : null}
         <p className="mt-4 text-sm text-muted">
           {flagged.length === 0
-            ? "None of the six checks raised a problem."
-            : `${flagged.length} of 6 checks raised a problem.`}
+            ? `None of the ${checks.length} checks raised a problem.`
+            : `${flagged.length} of ${checks.length} checks raised a problem.`}
           {notChecked.length > 0 ? ` We couldn't run ${notChecked.length === 1 ? "one check" : `${notChecked.length} checks`}.` : ""}
         </p>
       </section>
@@ -239,6 +245,15 @@ function FlagCard({
         <div className="min-w-0 flex-1">
           <h3 className="font-sans text-lg font-semibold text-ink">{w.title}</h3>
           <p className="mt-1 text-ink">{w.explanation}</p>
+          {attachedSignals(check).length > 0 ? (
+            <ul className="mt-2 space-y-1 text-sm text-muted" aria-label="Supporting signals">
+              {attachedSignals(check).map((e, i) => (
+                <li key={i}>
+                  <span className="font-medium text-ink">Supporting signal:</span> {describe(e).title}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {first ? (
             <Link
               href={`/report/${reportId}/evidence/${first.id}`}
@@ -261,6 +276,7 @@ function AffordabilityPanel({ a }: { a: Report["report"]["affordability"] }) {
   const income = a.rent_pct_of_payslip_net ? a.payslip_net_pay : a.average_monthly_income_in_account;
   const value = pct === null ? null : Number(pct);
   const headingId = useId();
+  const reduce = usePrefersReducedMotion();
   return (
     <section aria-labelledby={headingId} className="rounded-2xl border border-line bg-surface p-5 sm:p-7">
       <h2 id={headingId} className="text-2xl font-semibold text-ink">
@@ -282,6 +298,12 @@ function AffordabilityPanel({ a }: { a: Report["report"]["affordability"] }) {
             role="img"
             aria-label={`Rent is ${value}% of monthly income`}
           >
+            {reduce ? (
+              <div
+                className="h-full origin-left rounded-full bg-accent"
+                style={{ transform: `scaleX(${Math.min(value, 100) / 100})` }}
+              />
+            ) : (
             <motion.div
               className="h-full origin-left rounded-full bg-accent"
               initial={{ scaleX: 0 }}
@@ -289,6 +311,7 @@ function AffordabilityPanel({ a }: { a: Report["report"]["affordability"] }) {
               viewport={{ once: true }}
               transition={{ duration: 0.5, ease: "easeOut" }}
             />
+            )}
           </div>
           <div className="mt-1 flex justify-between text-xs text-muted" aria-hidden="true">
             <span>0%</span>

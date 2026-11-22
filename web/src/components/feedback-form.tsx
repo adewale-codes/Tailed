@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useId, useRef, useState } from "react";
+import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { Spinner, TickIcon } from "./icons";
 import { buttonPrimary } from "./state-panel";
 
@@ -42,6 +43,7 @@ export function FeedbackForm({ reportId }: { reportId: string }) {
   const thanksRef = useRef<HTMLDivElement>(null);
   const ids = { heading: useId(), followUp: useId(), comment: useId(), email: useId(), emailHint: useId() };
   const emailInvalid = email.trim() !== "" && !EMAIL_RE.test(email.trim());
+  const reduce = usePrefersReducedMotion();
 
   function choose(next: Vote) {
     if (next !== vote) setFollowUp(null); // the options change with the answer
@@ -91,7 +93,7 @@ export function FeedbackForm({ reportId }: { reportId: string }) {
             key="thanks"
             ref={thanksRef}
             tabIndex={-1}
-            initial={{ opacity: 0, y: 6 }}
+            initial={reduce ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.25 }}
             className="flex gap-3"
@@ -111,7 +113,12 @@ export function FeedbackForm({ reportId }: { reportId: string }) {
             </div>
           </motion.div>
         ) : (
-          <motion.form key="form" onSubmit={submit} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+          <motion.form
+            key="form"
+            onSubmit={submit}
+            exit={reduce ? undefined : { opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
             <h2 id={ids.heading} className="text-2xl font-semibold text-ink">
               Was this report useful?
             </h2>
@@ -142,9 +149,9 @@ export function FeedbackForm({ reportId }: { reportId: string }) {
               {vote ? (
                 <motion.div
                   key="details"
-                  initial={{ opacity: 0, height: 0 }}
+                  initial={reduce ? false : { opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
+                  exit={reduce ? undefined : { opacity: 0, height: 0 }}
                   transition={{ duration: 0.25 }}
                   className="overflow-hidden"
                 >

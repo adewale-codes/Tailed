@@ -17,6 +17,7 @@ CheckId = Literal[
     "employer_real",
     "looks_like_real_life",
     "names_match",
+    "file_signals",
 ]
 CHECK_ORDER: list[str] = [
     "balances_add_up",
@@ -25,6 +26,7 @@ CHECK_ORDER: list[str] = [
     "employer_real",
     "looks_like_real_life",
     "names_match",
+    "file_signals",
 ]
 Status = Literal["pass", "flag", "not_checked"]
 Verdict = Literal["looks_good", "needs_a_closer_look", "high_risk"]

@@ -4,10 +4,14 @@ import { API_UNREACHABLE, apiUrl, errorResponse, proxyHeaders, relay } from "@/l
 // obviously oversized bodies before they're streamed on.
 const MAX_BODY_BYTES = 12 * 10 * 1024 * 1024 + 1024 * 1024;
 
-/** POST /api/checks: streams the multipart upload straight through to the API. */
+/**
+ * POST /api/checks: starts a check. The web app sends a small form with the upload session id;
+ * a direct multipart upload with the files also works (under Vercel's 4.5 MB request cap).
+ */
 export async function POST(request: Request): Promise<Response> {
   const type = request.headers.get("content-type") ?? "";
-  if (!type.startsWith("multipart/form-data") || !request.body) {
+  const isForm = type.startsWith("multipart/form-data") || type.startsWith("application/x-www-form-urlencoded");
+  if (!isForm || !request.body) {
     return errorResponse(400, "invalid_request", "Please choose at least one document to upload.");
   }
   const length = Number(request.headers.get("content-length") ?? "0");

@@ -15,7 +15,6 @@ from decimal import Decimal
 
 from app.checks import tax_config as cfg
 from app.checks.models import CheckResult, DocumentInput, Evidence
-from app.checks.pdf_signals import modified_after
 from app.checks.util import gbp, money, payslips, pct, plural
 from app.reader.models import Payslip
 
@@ -107,8 +106,6 @@ def check_payslip_realistic(docs: list[DocumentInput]) -> CheckResult:
         evidence += found
         if reason:
             skipped.append(reason)
-        if (signal := modified_after(doc, p.pay_date.value)) is not None:
-            evidence.append(signal)
 
     if not evidence:
         return CheckResult(id="payslip_realistic", number=3, status="not_checked",
@@ -130,9 +127,7 @@ def _flag_title(flagged: list[Evidence]) -> str:
     kinds = {e.kind for e in flagged}
     if kinds & {"income_tax", "national_insurance"}:
         return "Tax or National Insurance looks wrong"
-    if "deductions_dont_add_up" in kinds:
-        return "Payslip figures don't add up"
-    return "The payslip file shows signs of editing"
+    return "Payslip figures don't add up"
 
 
 def _flag_explanation(flagged: list[Evidence]) -> str:

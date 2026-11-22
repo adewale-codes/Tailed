@@ -117,8 +117,9 @@ export function track(id: string, name: "report_viewed" | "evidence_opened"): vo
 // Findings: every flagged piece of evidence on a flagged check gets its own evidence view.
 // ---------------------------------------------------------------------------
 
-/** Evidence kinds that are about how a file was made, shown as supporting signals. */
-const SIGNAL_KINDS = new Set(["font_change", "modified_after_period"]);
+/** Evidence kinds about how a file was made (check 7). On a document another check flagged they
+ *  arrive attached to that check with flag=false, and are shown as supporting signals. */
+export const SIGNAL_KINDS = new Set(["font_change", "modified_after_period"]);
 
 export type Finding = {
   id: string; // "<check id>-<index in that check's evidence>", stable for a given report
@@ -151,7 +152,7 @@ export function supportingSignals(report: Report, finding: Finding): Evidence[] 
   return report.report.checks
     .flatMap((c) => c.evidence)
     .filter(
-      (e) => e !== finding.evidence && e.flag && SIGNAL_KINDS.has(e.kind) && e.file === finding.evidence.file,
+      (e) => e !== finding.evidence && SIGNAL_KINDS.has(e.kind) && e.file === finding.evidence.file,
     );
 }
 
@@ -309,7 +310,7 @@ export function describe(e: Evidence): Described {
       };
     case "modified_after_period":
       return {
-        title: "File changed after the statement was issued",
+        title: "This file was edited after it was issued",
         facts: [
           ...(d.period_end ? [{ label: "Statement period ends", value: shortDate(d.period_end) }] : []),
           ...(d.created ? [{ label: "File created", value: shortDate(d.created) }] : []),
@@ -374,4 +375,9 @@ export function checkWording(check: CheckResult): Wording {
 export function fileLabel(file: ReportFile | undefined): string {
   if (!file) return "Document";
   return file.name || `File ${file.key}`;
+}
+
+/** Signals attached to a flagged check as supporting evidence (not flags of their own). */
+export function attachedSignals(check: CheckResult): Evidence[] {
+  return check.evidence.filter((e) => !e.flag && SIGNAL_KINDS.has(e.kind));
 }

@@ -1,4 +1,4 @@
-"""Runs the six checks, decides the verdict and works out affordability.
+"""Runs the seven checks, decides the verdict and works out affordability.
 
 The verdict is decided here, by code. The wording step (app/report/wording.py) only rewrites
 the text afterwards and can't change a status, a number or the verdict.
@@ -8,6 +8,9 @@ Verdict rules:
     other check flagged.
   - needs_a_closer_look: any check flagged.
   - looks_good: no flags. (not_checked is not a flag, and is never shown as a pass.)
+
+Check 7 (file_signals) runs last because it needs the others' results: a sign of editing on a
+document another check already flagged becomes supporting evidence there, not a second flag.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from app.checks.balances import check_balances
 from app.checks.companies_house import CompanyLookup
 from app.checks.documents_agree import check_documents_agree
 from app.checks.employer_real import check_employer_real
+from app.checks.file_signals import check_file_signals
 from app.checks.models import Affordability, CheckResult, DocumentInput, Report, Verdict
 from app.checks.names_match import check_names_match
 from app.checks.payslip_realistic import check_payslip_realistic
@@ -45,6 +49,10 @@ def run_checks(docs: list[DocumentInput], monthly_rent: Decimal, companies: Comp
         checks.append(result)
         if on_check_done is not None:
             on_check_done(result)
+    signals = check_file_signals(docs, checks)  # may add supporting evidence to earlier checks
+    checks.append(signals)
+    if on_check_done is not None:
+        on_check_done(signals)
     verdict, reason = decide_verdict(checks)
     return Report(verdict=verdict, verdict_reason=reason, checks=checks,
                   affordability=affordability(docs, monthly_rent))

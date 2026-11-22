@@ -15,6 +15,10 @@ MESSAGES: dict[str, tuple[int, str]] = {
                                    "different type."),
     "rate_limited": (429, "You've reached today's limit of {checks_per_ip_per_day} free checks. "
                           "Please try again tomorrow."),
+    "upload_not_found": (404, "This upload has expired or was already used. Please choose your "
+                              "files again."),
+    "upload_out_of_order": (409, "Part of a file went missing on the way. Please try again."),
+    "chunk_too_large": (413, "That piece of the upload was too large."),
     "check_not_found": (404, "We couldn't find that check. Please check the link."),
     "check_expired": (410, "This report has been deleted. We delete every report and its "
                            "documents 24 hours after the check, to protect the tenant's privacy."),

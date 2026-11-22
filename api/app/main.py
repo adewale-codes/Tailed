@@ -13,10 +13,12 @@ from starlette.formparsers import MultiPartParser
 
 from app.ai_guard import set_guard
 from app.api.checks import router as checks_router
+from app.api.uploads import router as uploads_router
 from app.config import get_settings
 from app.services.cleanup import run_cleanup
 from app.services.errors import MESSAGES, ApiError
 from app.services.limits import reserve_ai_call
+from app.services.uploads import MAX_CHUNK_BYTES
 
 # Logging policy: only check IDs, timings and error types. Never document
 # contents, transaction lines, names or amounts.
@@ -55,7 +57,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         task.cancel()
 
 
-app = FastAPI(title="Tallied API", version="0.2.0", lifespan=lifespan)
+# The interactive docs list every endpoint; useful locally, not needed in production.
+_docs = {} if not settings.is_production else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="Tallied API", version="0.3.0", lifespan=lifespan, **_docs)
 
 app.add_middleware(
     CORSMiddleware,
@@ -79,6 +83,10 @@ async def limit_upload_size(request: Request, call_next):
             s = get_settings()
             return _error("upload_too_large", message=MESSAGES["upload_too_large"][1].format(
                 max_files=s.max_files, max_file_mb=s.max_file_mb))
+    if request.method == "POST" and request.url.path.startswith("/uploads/"):
+        length = request.headers.get("content-length")
+        if length and length.isdigit() and int(length) > MAX_CHUNK_BYTES + 64 * 1024:
+            return _error("chunk_too_large")
     return await call_next(request)
 
 
@@ -113,3 +121,4 @@ def health() -> dict[str, str]:
 
 
 app.include_router(checks_router)
+app.include_router(uploads_router)

@@ -2,6 +2,7 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,7 +35,8 @@ class Settings(BaseSettings):
     checks_per_ip_per_day: int = 3
     # Secret mixed into IP hashes so stored rate-limit rows can't be reversed into IPs.
     rate_limit_salt: str = "change-me"
-    # Only trust X-Forwarded-For when running behind a proxy you control (e.g. Railway).
+    # Only trust X-Forwarded-For when running behind a proxy you control. Keep it off in production:
+    # visitors' IPs come from the web app with web_proxy_secret instead.
     trust_proxy_headers: bool = False
     # Shared secret between the web app's server-side proxy and this API. When a request carries
     # it in X-Tallied-Proxy-Secret, X-Tallied-Client-IP is trusted as the user's real IP.
@@ -45,6 +47,19 @@ class Settings(BaseSettings):
 
     # Comma-separated list of origins allowed to call the API (the web app).
     cors_origins: str = "http://localhost:3000"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg_driver(cls, value: str) -> str:
+        """Hosts give postgresql://... or postgres://... URLs; SQLAlchemy needs the psycopg driver."""
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() == "production"
 
     @property
     def cors_origin_list(self) -> list[str]:

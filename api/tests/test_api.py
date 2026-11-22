@@ -89,12 +89,12 @@ def test_full_run(client, settings, monkeypatch) -> None:
     progress = client.get(f"/checks/{check_id}/progress").json()
     assert progress["status"] == "done" and progress["stage"] == "done"
     assert progress["documents"] == {"read": 5, "total": 5}
-    assert [c["done"] for c in progress["checks"]] == [True] * 6
-    assert [c["number"] for c in progress["checks"]] == [1, 2, 3, 4, 5, 6]
+    assert [c["done"] for c in progress["checks"]] == [True] * 7
+    assert [c["number"] for c in progress["checks"]] == [1, 2, 3, 4, 5, 6, 7]
 
     body = client.get(f"/checks/{check_id}").json()
     assert body["report"]["verdict"] == "looks_good"
-    assert [c["status"] for c in body["report"]["checks"]] == ["pass"] * 6
+    assert [c["status"] for c in body["report"]["checks"]] == ["pass"] * 7
     assert body["report"]["affordability"]["rent_pct_of_payslip_net"] == "41.5"
     keys = {f["key"] for f in body["files"]}
     assert keys == {"1", "2", "3", "4", "5"}
@@ -418,9 +418,11 @@ def test_funnel_events_recorded_and_anonymous(client, settings, db) -> None:
     client.post(f"/checks/{second}/events", json={"name": "report_viewed"})
     client.post(f"/checks/{first}/feedback", json={"vote": "up", "email": "a@example.com"})
 
+    client.post(f"/checks/{second}/feedback", json={"vote": "down"})
+    assert analytics.votes() == {"up": 1, "down": 1}
     funnel = {r["step"]: r["checks"] for r in analytics.funnel()}
     assert funnel == {"check_started": 3, "check_finished": 2, "report_viewed": 2,
-                      "evidence_opened": 1, "feedback_sent": 1, "email_left": 1}
+                      "evidence_opened": 1, "feedback_sent": 2, "email_left": 1}
     assert sql(db, "SELECT detail FROM events WHERE name = 'check_failed'") == [("unreadable_file",)]
     assert sql(db, "SELECT detail FROM events WHERE name = 'check_finished'") == [
         ("looks_good",), ("looks_good",)]
@@ -498,6 +500,26 @@ def test_web_proxy_client_ip_trusted_only_with_secret(client, settings, monkeypa
     assert upload(client, headers={"X-Tallied-Client-IP": "198.51.100.10"}).status_code == 429
 
 
+def test_forwarded_headers_from_a_reverse_proxy_are_ignored(client, settings, monkeypatch) -> None:
+    """Behind Coolify's Traefik: whatever forwarded headers arrive, only the web app's secret
+    header can name the visitor. Everything else counts against the connecting address."""
+    monkeypatch.setattr(settings, "web_proxy_secret", "s3cret-value")
+    spoofed = lambda n: {  # noqa: E731
+        "X-Forwarded-For": f"203.0.113.{n}", "X-Real-IP": f"203.0.113.{n}",
+        "Forwarded": f"for=203.0.113.{n};proto=https", "X-Forwarded-Proto": "https",
+        "X-Forwarded-Host": "api.example", "X-Tallied-Client-IP": f"203.0.113.{n}"}
+    assert [upload(client, headers=spoofed(n)).status_code for n in range(4)] == [202, 202, 202, 429]
+    web = {"X-Tallied-Proxy-Secret": "s3cret-value", "X-Tallied-Client-IP": "198.51.100.20"}
+    assert upload(client, headers={**spoofed(9), **web}).status_code == 202
+
+
+def test_start_script_never_trusts_forwarded_headers() -> None:
+    """uvicorn would otherwise take the client address from X-Forwarded-For on 127.0.0.1."""
+    start = (Path(__file__).resolve().parents[1] / "scripts" / "start.sh").read_text(encoding="utf-8")
+    line = next(x for x in start.splitlines() if x.startswith("exec uvicorn"))
+    assert "--no-proxy-headers" in line and "--forwarded-allow-ips" not in line
+
+
 def test_rate_limit_resets_next_day(client, settings, db) -> None:
     for _ in range(3):
         upload(client)
@@ -553,3 +575,103 @@ def test_errors_are_json_without_stack_traces(settings, monkeypatch) -> None:
         assert missing.status_code == 404 and missing.json()["error"]["code"] == "not_found"
         wrong = c.delete("/checks")
         assert wrong.status_code == 405 and wrong.json()["error"]["code"] == "method_not_allowed"
+
+
+# ---------------------------------------------------------------------------
+# Chunked upload sessions (the web app's path; each request stays under Vercel's 4.5 MB cap)
+# ---------------------------------------------------------------------------
+
+
+OCTET = "application/octet-stream"
+
+
+def chunked_upload(client, files, piece=700_000, rent="1100") -> str:
+    res = client.post("/uploads")
+    assert res.status_code == 201
+    upload_id = res.json()["upload_id"]
+    for index, (name, data) in enumerate(files, start=1):
+        for offset in range(0, len(data), piece):
+            r = client.post(f"/uploads/{upload_id}/chunks",
+                            data={"index": str(index), "offset": str(offset), "name": name},
+                            files={"chunk": ("blob", data[offset:offset + piece], OCTET)})
+            assert r.status_code == 200, r.text
+    res = client.post("/checks", data={"upload_id": upload_id, "monthly_rent": rent, "consent": "true"})
+    assert res.status_code == 202, res.text
+    return res.json()["id"]
+
+
+def raw_fixture(case: str = "genuine") -> list[tuple[str, bytes]]:
+    return [(p.name, p.read_bytes()) for p in sorted((FIXTURES / case).glob("*.pdf"))]
+
+
+def test_chunked_upload_runs_the_same_check(client, settings) -> None:
+    files = raw_fixture()
+    check_id = chunked_upload(client, files, piece=2_000)  # many small pieces per file
+    body = client.get(f"/checks/{check_id}").json()
+    assert body["report"]["verdict"] == "looks_good"
+    assert [f["name"] for f in body["files"]] == [n for n, _ in files]
+    assert temp_contents(settings) == []  # session folder claimed and deleted after processing
+
+
+def test_chunk_out_of_order_is_refused(client, settings) -> None:
+    upload_id = client.post("/uploads").json()["upload_id"]
+    data = raw_fixture()[0][1]
+    res = client.post(f"/uploads/{upload_id}/chunks", data={"index": "1", "offset": "500"},
+                      files={"chunk": ("blob", data[500:900], "application/octet-stream")})
+    assert res.status_code == 409 and res.json()["error"]["code"] == "upload_out_of_order"
+
+
+def test_chunked_upload_checks_real_type_and_size(client, settings, monkeypatch) -> None:
+    upload_id = client.post("/uploads").json()["upload_id"]
+    res = client.post(f"/uploads/{upload_id}/chunks", data={"index": "1", "offset": "0", "name": "x.pdf"},
+                      files={"chunk": ("blob", b"MZ\x90\x00 not a pdf", "application/pdf")})
+    assert res.status_code == 415 and res.json()["error"]["code"] == "unsupported_file_type"
+
+    monkeypatch.setattr(settings, "max_file_mb", 1)
+    data = raw_fixture()[0][1] + b"\0" * 1_100_000
+    res = client.post(f"/uploads/{upload_id}/chunks", data={"index": "2", "offset": "0"},
+                      files={"chunk": ("blob", data[:600_000], "application/octet-stream")})
+    assert res.status_code == 200
+    res = client.post(f"/uploads/{upload_id}/chunks", data={"index": "2", "offset": "600000"},
+                      files={"chunk": ("blob", data[600_000:1_200_000], "application/octet-stream")})
+    assert res.status_code == 413 and res.json()["error"]["code"] == "file_too_large"
+    assert not (Path(settings.upload_temp_dir) / f"session-{upload_id}" / "2.upload").exists()
+
+
+def test_oversized_chunk_request_is_refused_before_reading(client, settings) -> None:
+    upload_id = client.post("/uploads").json()["upload_id"]
+    res = client.post(f"/uploads/{upload_id}/chunks", data={"index": "1", "offset": "0"},
+                      files={"chunk": ("blob", b"%PDF" + b"\0" * (4 * 1024 * 1024 + 70_000), OCTET)})
+    assert res.status_code == 413 and res.json()["error"]["code"] == "chunk_too_large"
+
+
+def test_upload_session_can_only_start_one_check(client, settings) -> None:
+    res = client.post("/uploads")
+    upload_id = res.json()["upload_id"]
+    name, data = raw_fixture()[0]
+    client.post(f"/uploads/{upload_id}/chunks", data={"index": "1", "offset": "0", "name": name},
+                files={"chunk": ("blob", data, "application/octet-stream")})
+    form = {"upload_id": upload_id, "monthly_rent": "1100", "consent": "true"}
+    assert client.post("/checks", data=form).status_code == 202
+    again = client.post("/checks", data=form)
+    assert again.status_code == 404 and again.json()["error"]["code"] == "upload_not_found"
+    bogus = client.post("/checks", data={**form, "upload_id": "../../etc"})
+    assert bogus.status_code == 404
+
+
+def test_abandoned_upload_sessions_are_removed(client, settings) -> None:
+    upload_id = client.post("/uploads").json()["upload_id"]
+    name, data = raw_fixture()[0]
+    client.post(f"/uploads/{upload_id}/chunks", data={"index": "1", "offset": "0", "name": name},
+                files={"chunk": ("blob", data, "application/octet-stream")})
+    assert run_cleanup(now=datetime.now(UTC) + timedelta(minutes=30)).temp_folders_removed == 0
+    assert run_cleanup(now=datetime.now(UTC) + timedelta(hours=2)).temp_folders_removed == 1
+    assert temp_contents(settings) == []
+
+
+def test_upload_session_refused_when_daily_limit_used(client, settings) -> None:
+    for _ in range(3):
+        upload(client)
+    res = client.post("/uploads")
+    assert res.status_code == 429 and res.json()["error"]["code"] == "rate_limited"
+    assert temp_contents(settings) == []

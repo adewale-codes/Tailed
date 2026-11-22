@@ -9,7 +9,8 @@
     "payslip_realistic": "pass",
     "employer_real": "not_asserted",
     "looks_like_real_life": "pass",
-    "names_match": "pass"
+    "names_match": "pass",
+    "file_signals": "pass"
   },
   "expected_flags": [
     {
@@ -31,7 +32,9 @@
       "closing_expected": "3391.30"
     },
     {
-      "check": "balances_add_up",
+      "check": "file_signals",
+      "shown_with": "balances_add_up",
+      "supporting": true,
       "kind": "font_change",
       "file": "statement_2026-10.pdf",
       "date": "2026-10-12",

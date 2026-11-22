@@ -186,10 +186,11 @@ function FindingDetail({
   const size = finding.file?.pages?.find((p) => p.page === page) ?? null;
   const headingId = useId();
   const signalsId = useId();
+  const reduce = usePrefersReducedMotion();
 
   return (
     <motion.article
-      initial={{ opacity: 0 }}
+      initial={reduce ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.2 }}
       aria-labelledby={headingId}

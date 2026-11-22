@@ -69,3 +69,14 @@ def funnel(days: int = 30, now: datetime | None = None) -> list[dict]:
     return [{"step": name, "checks": rows.get(name, 0),
              "pct_of_started": round(100 * rows.get(name, 0) / started, 1) if started else None}
             for name in FUNNEL]
+
+
+def votes(days: int = 30, now: datetime | None = None) -> dict[str, int]:
+    """Thumbs up vs down from feedback events (the vote is the event's detail)."""
+    since = (now or datetime.now(UTC)) - timedelta(days=days)
+    with session_scope() as s:
+        rows = dict(s.execute(
+            select(Event.detail, func.count()).where(Event.name == "feedback_sent",
+                                                     Event.created_at >= since)
+            .group_by(Event.detail)).all())
+    return {"up": rows.get("up", 0), "down": rows.get("down", 0)}

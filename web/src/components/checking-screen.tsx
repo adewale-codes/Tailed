@@ -24,7 +24,7 @@ const RESULT: Record<CheckStatus, { text: string; badge: string; Icon: typeof Ti
   not_checked: { text: "Couldn't check", badge: "bg-canvas text-muted", Icon: DashIcon },
 };
 
-/** 0-100. Reading is the first 30%, the six checks the next 60%, writing the report the rest. */
+/** 0-100. Reading is the first 30%, the checks the next 60%, writing the report the rest. */
 export function percentDone(p: Progress | null): number {
   if (!p) return 0;
   if (p.status === "done") return 100;
@@ -51,6 +51,7 @@ export function CheckingScreen({ id }: { id: string }) {
   const [attempt, setAttempt] = useState(0);
   const [upload] = useState(() => recallUpload(id));
   const reportLinkRef = useRef<HTMLAnchorElement>(null);
+  const reduce = usePrefersReducedMotion();
 
   useEffect(() => {
     let cancelled = false;
@@ -112,9 +113,9 @@ export function CheckingScreen({ id }: { id: string }) {
   const finished = (progress?.checks ?? []).filter((c) => c.status);
   const latest = finished.at(-1);
   const announcement = done
-    ? "All six checks are done. Your report is ready."
+    ? "All the checks are done. Your report is ready."
     : latest?.status
-      ? `${finished.length} of 6 checks done. ${latest.label}: ${RESULT[latest.status].text}.`
+      ? `${finished.length} of ${progress?.checks.length ?? 7} checks done. ${latest.label}: ${RESULT[latest.status].text}.`
       : "";
 
   return (
@@ -137,7 +138,7 @@ export function CheckingScreen({ id }: { id: string }) {
         <div className="min-w-0">
           <ProgressBar percent={percent} label={stageText(progress)} />
 
-          <ol className="mt-5 divide-y divide-line rounded-xl border border-line bg-surface" aria-label="The six checks">
+          <ol className="mt-5 divide-y divide-line rounded-xl border border-line bg-surface" aria-label="The checks">
             {(progress?.checks ?? placeholderChecks()).map((check) => (
               <CheckRow
                 key={check.id}
@@ -169,7 +170,7 @@ export function CheckingScreen({ id }: { id: string }) {
           <AnimatePresence>
             {done ? (
               <motion.div
-                initial={{ opacity: 0, y: 8 }}
+                initial={reduce ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
                 className="mt-6"
@@ -198,10 +199,12 @@ function placeholderChecks(): Progress["checks"] {
     "Employer is a real company",
     "Spending looks like everyday life",
     "Names match",
+    "Files haven't been edited",
   ].map((label, i) => ({ id: `pending-${i}`, number: i + 1, label, done: false, status: null }));
 }
 
 function ProgressBar({ percent, label }: { percent: number; label: string }) {
+  const reduce = usePrefersReducedMotion();
   return (
     <div>
       <div className="flex items-baseline justify-between gap-3 text-sm">
@@ -217,12 +220,17 @@ function ProgressBar({ percent, label }: { percent: number; label: string }) {
         aria-valuetext={`${percent}%, ${label}`}
         className="mt-2 h-2 overflow-hidden rounded-full bg-line"
       >
-        <motion.div
-          className="h-full origin-left rounded-full bg-accent"
-          initial={false}
-          animate={{ scaleX: percent / 100 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-        />
+        {reduce ? (
+          // Reduced motion: a plain bar set straight to its value, no animation calls at all.
+          <div className="h-full origin-left rounded-full bg-accent" style={{ transform: `scaleX(${percent / 100})` }} />
+        ) : (
+          <motion.div
+            className="h-full origin-left rounded-full bg-accent"
+            initial={false}
+            animate={{ scaleX: percent / 100 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          />
+        )}
       </div>
     </div>
   );
@@ -240,6 +248,7 @@ function CheckRow({
   active: boolean;
 }) {
   const result = status ? RESULT[status] : null;
+  const reduce = usePrefersReducedMotion();
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <span className="relative flex h-7 w-7 shrink-0 items-center justify-center">
@@ -247,7 +256,8 @@ function CheckRow({
           {result ? (
             <motion.span
               key="result"
-              initial={{ opacity: 0, scale: 0.6 }}
+              // Reduced motion: appear in the final state, without a scale or fade.
+              initial={reduce ? false : { opacity: 0, scale: 0.6 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.25, ease: "easeOut" }}
               className={`flex h-7 w-7 items-center justify-center rounded-full ${result.badge}`}
@@ -257,7 +267,7 @@ function CheckRow({
           ) : (
             <motion.span
               key="waiting"
-              exit={{ opacity: 0, scale: 0.6 }}
+              exit={reduce ? undefined : { opacity: 0, scale: 0.6 }}
               transition={{ duration: 0.15 }}
               className={`flex h-7 w-7 items-center justify-center rounded-full ${active ? "text-accent" : "text-line"}`}
             >

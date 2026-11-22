@@ -21,7 +21,7 @@ from app.services import analytics
 from app.services.errors import ApiError
 from app.services.limits import checks_used_today, client_ip, consume_check, ip_hash, new_check_id
 from app.services.processing import CHECK_LABELS, initial_progress, process_check
-from app.services.uploads import save_uploads
+from app.services.uploads import claim_session, save_uploads
 
 router = APIRouter(prefix="/checks", tags=["checks"])
 
@@ -61,6 +61,7 @@ async def create_check(
     files: list[UploadFile] = File(default=[]),
     monthly_rent: str | None = Form(default=None),
     consent: str | None = Form(default=None),
+    upload_id: str | None = Form(default=None),
 ) -> dict:
     settings = get_settings()
     if (consent or "").strip().lower() not in {"true", "1", "yes", "on"}:
@@ -71,7 +72,13 @@ async def create_check(
     if checks_used_today(hashed) >= settings.checks_per_ip_per_day:  # cheap early refusal
         raise ApiError("rate_limited", checks_per_ip_per_day=settings.checks_per_ip_per_day)
 
-    folder, uploads = await save_uploads(files)
+    # Either the files themselves, or a finished chunked-upload session from the web app.
+    if upload_id:
+        for f in files:
+            await f.close()
+        folder, uploads = claim_session(upload_id)
+    else:
+        folder, uploads = await save_uploads(files)
     try:
         if not consume_check(hashed):  # atomic; catches concurrent requests
             raise ApiError("rate_limited", checks_per_ip_per_day=settings.checks_per_ip_per_day)
