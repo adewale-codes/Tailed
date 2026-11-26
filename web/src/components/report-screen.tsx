@@ -21,6 +21,7 @@ import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { FeedbackForm } from "./feedback-form";
 import { AlertIcon, DashIcon, Spinner, TickIcon } from "./icons";
 import { ReportProblem } from "./report-problem";
+import { SampleNotice } from "./sample-notice";
 import { buttonSecondary } from "./state-panel";
 
 const VERDICTS: Record<Verdict, { label: string; card: string; badge: string; Icon: typeof TickIcon }> = {
@@ -86,6 +87,7 @@ function ReportView({ report }: { report: Report }) {
 
   return (
     <div className="space-y-10">
+      {report.sample ? <SampleNotice sample={report.sample} /> : null}
       {/* Verdict */}
       <section aria-labelledby={hid("verdict")} data-section="verdict" className={`rounded-2xl border p-5 sm:p-7 ${v.card}`}>
         <p className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${v.badge}`}>

@@ -5,6 +5,10 @@ vocabulary (a verdict, a vote, an error code). No IP address, user agent, cookie
 or free text is ever recorded. The hash lets the funnel be counted per check, and can't be joined
 back to a check once the check's tombstone is gone.
 
+Events about sample checks (made-up documents, app/samples.py) are tagged `sample=True`, looked up
+from the check itself so no caller can forget. funnel() and votes() count real checks unless asked
+for samples, so launch metrics never include people trying the samples.
+
 Recording never breaks the request that triggers it: failures are logged by type and ignored.
 """
 
@@ -18,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 
 from app.config import get_settings
-from app.db.models import Event
+from app.db.models import Check, Event
 from app.db.session import session_scope
 
 log = logging.getLogger(__name__)
@@ -53,30 +57,34 @@ def record(name: str, check_id: str, detail: str | None = None) -> None:
                             .where(Event.name == name, Event.check_ref == ref))
             if seen >= MAX_PER_CHECK_AND_NAME:
                 return
-            s.add(Event(name=name, check_ref=ref, detail=(detail or None) and detail[:32]))
+            sample = s.scalar(select(Check.sample_id).where(Check.id == check_id)) is not None
+            s.add(Event(name=name, check_ref=ref, detail=(detail or None) and detail[:32], sample=sample))
     except Exception as exc:  # analytics must never break the product
         log.error("analytics.record_failed event=%s type=%s", name, type(exc).__name__)
 
 
-def funnel(days: int = 30, now: datetime | None = None) -> list[dict]:
-    """For each funnel step: how many distinct checks reached it in the last `days` days."""
+def funnel(days: int = 30, now: datetime | None = None, sample: bool = False) -> list[dict]:
+    """For each funnel step: how many distinct checks reached it in the last `days` days.
+    Real checks only, unless sample=True (then sample checks only)."""
     since = (now or datetime.now(UTC)) - timedelta(days=days)
     with session_scope() as s:
         rows = dict(s.execute(
             select(Event.name, func.count(func.distinct(Event.check_ref)))
-            .where(Event.created_at >= since).group_by(Event.name)).all())
+            .where(Event.created_at >= since, Event.sample.is_(sample)).group_by(Event.name)).all())
     started = rows.get("check_started", 0)
     return [{"step": name, "checks": rows.get(name, 0),
              "pct_of_started": round(100 * rows.get(name, 0) / started, 1) if started else None}
             for name in FUNNEL]
 
 
-def votes(days: int = 30, now: datetime | None = None) -> dict[str, int]:
-    """Thumbs up vs down from feedback events (the vote is the event's detail)."""
+def votes(days: int = 30, now: datetime | None = None, sample: bool = False) -> dict[str, int]:
+    """Thumbs up vs down from feedback events (the vote is the event's detail). Real checks only,
+    unless sample=True."""
     since = (now or datetime.now(UTC)) - timedelta(days=days)
     with session_scope() as s:
         rows = dict(s.execute(
             select(Event.detail, func.count()).where(Event.name == "feedback_sent",
-                                                     Event.created_at >= since)
+                                                     Event.created_at >= since,
+                                                     Event.sample.is_(sample))
             .group_by(Event.detail)).all())
     return {"up": rows.get("up", 0), "down": rows.get("down", 0)}

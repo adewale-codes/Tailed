@@ -27,27 +27,6 @@ REGISTRY = StaticCompanies([
 ])
 
 
-@pytest.fixture
-def settings(db, tmp_path, monkeypatch):
-    s = get_settings()
-    monkeypatch.setattr(s, "upload_temp_dir", str(tmp_path / "uploads"))
-    monkeypatch.setattr(s, "anthropic_api_key", "")         # no real Claude calls
-    monkeypatch.setattr(s, "companies_house_api_key", "")   # employer_real -> not_checked
-    monkeypatch.setattr(s, "checks_per_ip_per_day", 3)
-    monkeypatch.setattr(s, "trust_proxy_headers", False)
-    monkeypatch.setattr(s, "web_proxy_secret", "")
-    monkeypatch.setattr(s, "max_files", 12)
-    monkeypatch.setattr(s, "max_file_mb", 10)
-    monkeypatch.setattr(s, "ai_daily_call_cap", 200)
-    return s
-
-
-@pytest.fixture
-def client(settings):
-    with TestClient(app) as c:
-        yield c
-
-
 def sql(db_url: str, query: str, **params):
     engine = create_engine(db_url)
     with engine.begin() as conn:
@@ -469,7 +448,7 @@ def test_funnel_events_recorded_and_anonymous(client, settings, db) -> None:
         assert secret not in dump
     assert sql(db, "SELECT column_name FROM information_schema.columns WHERE table_name = 'events' "
                    "ORDER BY ordinal_position") == [("id",), ("name",), ("check_ref",), ("detail",),
-                                                     ("created_at",)]
+                                                     ("created_at",), ("sample",)]  # sample: a yes/no
 
 
 def test_client_events_are_limited_to_known_names(client, settings) -> None:

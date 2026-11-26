@@ -171,7 +171,9 @@ uv run python ../fixtures/generate.py
 
 Cookie-free and self-hosted: an `events` table holding an event name, a time and a salted hash of
 the check id. There's no IP address, user agent, cookie or document data. Events: check started,
-finished (or failed), report viewed, evidence opened, feedback sent and email left. To see the funnel:
+finished (or failed), report viewed, evidence opened, feedback sent and email left. Events from
+"Try a sample" checks (made-up documents, `api/app/samples.py`) carry `sample = true`, and the funnel
+prints real checks (the launch metrics) and sample checks as separate tables. To see the funnel:
 
 ```bash
 cd api

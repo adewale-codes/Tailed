@@ -21,6 +21,7 @@ import {
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { AlertIcon, Spinner } from "./icons";
 import { ReportProblem } from "./report-problem";
+import { SampleNotice } from "./sample-notice";
 import { StatePanel, buttonPrimary } from "./state-panel";
 
 type Tone = "closer" | "risk";
@@ -95,6 +96,11 @@ function EvidenceView({ report, initialId }: { report: Report; initialId: string
       >
         <span aria-hidden="true">←</span> Back to the report
       </Link>
+      {report.sample ? (
+        <div className="mt-3">
+          <SampleNotice sample={report.sample} />
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-6 lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-10">
         <FindingsNav findings={findings} selected={selected} onSelect={select} tone={tone} />

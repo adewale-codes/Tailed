@@ -37,11 +37,15 @@ export type ReportFile = {
   error?: ApiError;
 };
 
+/** Set when the check ran one of the made-up sample document sets (lib/samples.ts). */
+export type SampleInfo = { id: string; title: string };
+
 export type Report = {
   id: string;
   status: "done";
   created_at: string;
   expires_at: string;
+  sample?: SampleInfo | null;
   files: ReportFile[];
   report: {
     verdict: Verdict;

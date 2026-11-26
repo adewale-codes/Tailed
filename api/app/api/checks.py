@@ -17,9 +17,10 @@ from app.checks.models import CHECK_ORDER
 from app.config import get_settings
 from app.db.models import Check, Feedback, FeedbackContact, PageImage
 from app.db.session import session_scope
+from app.samples import SAMPLES, get_sample, require_sample_files
 from app.services import analytics
 from app.services.errors import ApiError
-from app.services.limits import checks_used_today, client_ip, consume_check, ip_hash, new_check_id
+from app.services.limits import checks_used_today, client_ip, consume_check, limit_for, new_check_id
 from app.services.processing import CHECK_LABELS, initial_progress, run_check
 from app.services.uploads import claim_session, save_uploads
 
@@ -62,15 +63,19 @@ async def create_check(
     monthly_rent: str | None = Form(default=None),
     consent: str | None = Form(default=None),
     upload_id: str | None = Form(default=None),
+    sample: str | None = Form(default=None),
 ) -> dict:
     settings = get_settings()
-    if (consent or "").strip().lower() not in {"true", "1", "yes", "on"}:
+    # A sample is made-up documents: no tenant, so no consent, and its own fixed rent. Whether the
+    # files really are the sample is checked below, before anything is counted or stored.
+    spec = get_sample(sample)
+    if spec is None and (consent or "").strip().lower() not in {"true", "1", "yes", "on"}:
         raise ApiError("consent_required")
-    rent = _parse_rent(monthly_rent)
+    rent = spec.rent if spec else _parse_rent(monthly_rent)
 
-    hashed = ip_hash(client_ip(request))
-    if checks_used_today(hashed) >= settings.checks_per_ip_per_day:  # cheap early refusal
-        raise ApiError("rate_limited", checks_per_ip_per_day=settings.checks_per_ip_per_day)
+    hashed, limit, limit_code = limit_for(client_ip(request), sample=spec is not None)
+    if checks_used_today(hashed) >= limit:  # cheap early refusal
+        raise _limit_error(limit_code, limit)
 
     # Either the files themselves, or a finished chunked-upload session from the web app.
     if upload_id:
@@ -80,15 +85,18 @@ async def create_check(
     else:
         folder, uploads = await save_uploads(files)
     try:
-        if not consume_check(hashed):  # atomic; catches concurrent requests
-            raise ApiError("rate_limited", checks_per_ip_per_day=settings.checks_per_ip_per_day)
+        if spec:
+            require_sample_files(spec, uploads)
+        if not consume_check(hashed, limit):  # atomic; catches concurrent requests
+            raise _limit_error(limit_code, limit)
         check_id = new_check_id()
         now = datetime.now(UTC)
         with session_scope() as s:
             s.add(Check(id=check_id, created_at=now,
                         expires_at=now + timedelta(hours=settings.report_ttl_hours),
                         status="queued", progress=initial_progress(len(uploads)),
-                        monthly_rent=rent, file_count=len(uploads), rate_limit_key=hashed))
+                        monthly_rent=rent, file_count=len(uploads), rate_limit_key=hashed,
+                        sample_id=spec.id if spec else None))
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)
         raise
@@ -97,7 +105,18 @@ async def create_check(
     background.add_task(run_check, check_id, folder, uploads, rent)
     return {"id": check_id, "status": "queued",
             "progress_url": f"/checks/{check_id}/progress", "report_url": f"/checks/{check_id}",
-            "expires_at": (now + timedelta(hours=settings.report_ttl_hours)).isoformat()}
+            "expires_at": (now + timedelta(hours=settings.report_ttl_hours)).isoformat(),
+            "sample": spec.public() if spec else None}
+
+
+def _limit_error(code: str, limit: int) -> ApiError:
+    return ApiError(code, checks_per_ip_per_day=limit, sample_checks_per_ip_per_day=limit)
+
+
+def _sample_of(check: Check) -> dict | None:
+    """{"id", "title"} for a sample check, else None. Shown as the "Sample" badge."""
+    spec = SAMPLES.get(check.sample_id) if check.sample_id else None
+    return spec.public() if spec else None
 
 
 @router.get("/{check_id}/progress")
@@ -115,6 +134,7 @@ def get_progress(check_id: str) -> dict:
         "files": [{"key": str(n), **progress.get("files", {}).get(str(n), {"status": "pending"})}
                   for n in range(1, check.file_count + 1)],
         "preview": progress.get("preview"),
+        "sample": _sample_of(check),
         "checks": [{"id": cid, "number": n, "label": CHECK_LABELS[cid],
                     "done": statuses.get(cid) is not None, "status": statuses.get(cid)}
                    for n, cid in enumerate(CHECK_ORDER, start=1)],
@@ -139,6 +159,7 @@ def get_report(check_id: str) -> JSONResponse:
     return JSONResponse(content={
         "id": check.id, "status": "done",
         "created_at": check.created_at.isoformat(), "expires_at": check.expires_at.isoformat(),
+        "sample": _sample_of(check),
         "files": check.report["files"], "report": check.report["report"]},
         headers={"Cache-Control": "no-store"})
 
@@ -191,7 +212,8 @@ def post_feedback(check_id: str, body: FeedbackIn) -> dict:
             s.flush()
         s.add(Feedback(check_id=check_id, vote=body.vote, follow_up=body.follow_up,
                        comment=(body.comment or "").strip() or None,
-                       verdict=verdict, contact_id=contact.id if contact else None))
+                       verdict=verdict, contact_id=contact.id if contact else None,
+                       sample=check.sample_id is not None))
     analytics.record("feedback_sent", check_id, body.vote)
     if email:
         analytics.record("email_left", check_id)

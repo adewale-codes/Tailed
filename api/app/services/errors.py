@@ -15,6 +15,10 @@ MESSAGES: dict[str, tuple[int, str]] = {
                                    "different type."),
     "rate_limited": (429, "You've reached today's limit of {checks_per_ip_per_day} free checks. "
                           "Please try again tomorrow."),
+    "sample_rate_limited": (429, "You've run today's {sample_checks_per_ip_per_day} sample checks. "
+                                 "Please come back tomorrow, or check real documents."),
+    "sample_not_found": (404, "We couldn't find that sample. Please choose one from the list."),
+    "not_a_sample": (400, "These aren't the sample documents. Please choose the sample again."),
     "upload_not_found": (404, "This upload has expired or was already used. Please choose your "
                               "files again."),
     "upload_out_of_order": (409, "Part of a file went missing on the way. Please try again."),

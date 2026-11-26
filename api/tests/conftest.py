@@ -18,7 +18,11 @@ os.environ["CLEANUP_INTERVAL_MINUTES"] = "0"   # tests run cleanup explicitly
 os.environ["RATE_LIMIT_SALT"] = "test-salt"
 
 import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
+
+from app.config import get_settings  # noqa: E402
+from app.main import app  # noqa: E402
 
 API_DIR = Path(__file__).resolve().parents[1]
 
@@ -48,3 +52,27 @@ def db(migrated_db: str) -> Iterator[str]:
                           "feedback_contacts, events RESTART IDENTITY CASCADE"))
     engine.dispose()
     yield migrated_db
+
+
+# Shared by the API test modules: settings for a clean, offline run, and a client that runs the
+# app's startup and shutdown.
+@pytest.fixture
+def settings(db, tmp_path, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "upload_temp_dir", str(tmp_path / "uploads"))
+    monkeypatch.setattr(s, "anthropic_api_key", "")         # no real Claude calls
+    monkeypatch.setattr(s, "companies_house_api_key", "")   # employer_real -> not_checked
+    monkeypatch.setattr(s, "checks_per_ip_per_day", 3)
+    monkeypatch.setattr(s, "sample_checks_per_ip_per_day", 10)
+    monkeypatch.setattr(s, "trust_proxy_headers", False)
+    monkeypatch.setattr(s, "web_proxy_secret", "")
+    monkeypatch.setattr(s, "max_files", 12)
+    monkeypatch.setattr(s, "max_file_mb", 10)
+    monkeypatch.setattr(s, "ai_daily_call_cap", 200)
+    return s
+
+
+@pytest.fixture
+def client(settings):
+    with TestClient(app) as c:
+        yield c

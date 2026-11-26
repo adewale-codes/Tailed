@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Privacy and abuse limits.
     report_ttl_hours: int = 24
     checks_per_ip_per_day: int = 3
+    # Sample checks (made-up documents) have their own daily limit; they don't use the 3 above.
+    sample_checks_per_ip_per_day: int = 10
     # Secret mixed into IP hashes so stored rate-limit rows can't be reversed into IPs.
     rate_limit_salt: str = "change-me"
     # Only trust X-Forwarded-For when running behind a proxy you control. Keep it off in production:

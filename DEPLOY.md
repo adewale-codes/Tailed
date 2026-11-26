@@ -117,7 +117,7 @@ heroku config:set -a YOUR-APP \
   CORS_ORIGINS=https://tallied.vercel.app \
   CLAUDE_MODEL=claude-opus-5-5 CLAUDE_EFFORT=medium AI_DAILY_CALL_CAP=200 \
   MAX_FILES=12 MAX_FILE_MB=10 MAX_PAGES=30 \
-  REPORT_TTL_HOURS=24 CHECKS_PER_IP_PER_DAY=3 TRUST_PROXY_HEADERS=false \
+  REPORT_TTL_HOURS=24 CHECKS_PER_IP_PER_DAY=3 SAMPLE_CHECKS_PER_IP_PER_DAY=10 TRUST_PROXY_HEADERS=false \
   CLEANUP_INTERVAL_MINUTES=10 MAX_CONCURRENT_CHECKS=1
 ```
 
@@ -182,6 +182,7 @@ Taken from `api/.env.example` and `web/.env.example`.
 | `MAX_PAGES` | `30` | |
 | `REPORT_TTL_HOURS` | `24` | Keep at 24: the privacy page promises it |
 | `CHECKS_PER_IP_PER_DAY` | `3` | Raise temporarily for the smoke test (section 8) |
+| `SAMPLE_CHECKS_PER_IP_PER_DAY` | `10` | "Try a sample" checks on made-up documents. Their own limit: they never use the 3 real checks. They still count towards `AI_DAILY_CALL_CAP` |
 | `RATE_LIMIT_SALT` | Secret A | Secret. Never change it after launch, or today's counts reset |
 | `TRUST_PROXY_HEADERS` | `false` | Keep false. See "Only the web app can call the API" below |
 | `WEB_PROXY_SECRET` | Secret B | Secret. **Required**: the API won't start in production without it (at least 32 characters). Must match Vercel. See "Only the web app can call the API" |
@@ -478,7 +479,8 @@ hardening. That's 7 checks from your IP, so:
 - [ ] Multi-factor authentication on Heroku, Vercel and GitHub
 - [ ] Monitoring (section 12) and a tested restore of the feedback backup (section 10)
 - [ ] Test with your own real statements first, then 5 to 10 friendly agents or landlords
-- [ ] Decide what you'll measure, and look at it weekly with `scripts/funnel.py` (section 7):
+- [ ] Decide what you'll measure, and look at it weekly with `scripts/funnel.py` (section 7). Its first
+      table, real checks, is the launch metric. Sample checks are listed after it and never mixed in:
   - checks finished as a share of checks started
   - thumbs up vs down (`Was it useful?` line)
   - emails left

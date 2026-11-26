@@ -1,3 +1,4 @@
+import { SampleSection } from "@/components/sample-section";
 import { UploadForm } from "@/components/upload-form";
 
 export default function Home() {
@@ -13,6 +14,7 @@ export default function Home() {
       <div className="mt-8 rounded-2xl border border-line bg-surface p-5 sm:p-8">
         <UploadForm />
       </div>
+      <SampleSection />
     </div>
   );
 }

@@ -107,8 +107,8 @@ export default function PrivacyPage() {
 
       <Section title="Limits and usage counts">
         <p>
-          Each person can run 3 free checks a day. To enforce this we keep a scrambled version of your IP address (a
-          one-way hash) for 2 days. We never store the IP address itself.
+          Each person can run 3 free checks a day, plus 10 checks of our made-up sample documents. To enforce this we
+          keep a scrambled version of your IP address (a one-way hash) for 2 days. We never store the IP address itself.
         </p>
         <p>
           We count how many checks are started, finished and viewed, and how often feedback is left. These counts use an

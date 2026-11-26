@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import type { ApiError } from "@/lib/types";
+import { uploadAndStart } from "@/lib/upload";
 import { rememberUpload } from "@/lib/upload-store";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import { CloseIcon, DocumentIcon, Spinner, UploadIcon } from "./icons";
@@ -16,57 +17,6 @@ const ACCEPTED_TYPES = ["application/pdf", "image/jpeg", "image/png"];
 const ACCEPTED_EXT = /\.(pdf|jpe?g|png)$/i;
 
 type Picked = { id: string; file: File };
-
-// Files go up in pieces: Vercel refuses any request body over 4.5 MB.
-const PIECE_BYTES = 3.5 * 1024 * 1024;
-const FALLBACK_ERROR: ApiError = { code: "internal_error", message: "Something went wrong on our side. Please try again." };
-
-type Outcome = { ok: true; id: string } | { ok: false; status: number; error: ApiError };
-
-async function failure(res: Response): Promise<Outcome> {
-  const data = await res.json().catch(() => null);
-  return { ok: false, status: res.status, error: data?.error ?? FALLBACK_ERROR };
-}
-
-/** Open an upload session, send every file in pieces, then start the check. */
-async function uploadAndStart(files: File[], rent: string, onProgress: (pct: number) => void): Promise<Outcome> {
-  const session = await fetch("/api/uploads", { method: "POST" });
-  if (session.status !== 201) return failure(session);
-  const { upload_id: uploadId } = (await session.json()) as { upload_id: string };
-
-  const total = files.reduce((n, f) => n + f.size, 0) || 1;
-  let sent = 0;
-  for (const [i, file] of files.entries()) {
-    for (let offset = 0; offset < file.size; offset += PIECE_BYTES) {
-      const piece = file.slice(offset, Math.min(offset + PIECE_BYTES, file.size));
-      const form = new FormData();
-      form.append("index", String(i + 1));
-      form.append("offset", String(offset));
-      form.append("name", file.name);
-      form.append("chunk", piece, "piece");
-      const res = await fetch(`/api/uploads/${uploadId}/chunks`, { method: "POST", body: form });
-      if (!res.ok) {
-        const out = await failure(res);
-        if (out.ok) return out;
-        return { ...out, error: { ...out.error, message: `${file.name}: ${out.error.message}` } };
-      }
-      sent += piece.size;
-      onProgress(Math.min(99, Math.round((sent / total) * 100)));
-    }
-  }
-
-  const start = new FormData();
-  start.append("upload_id", uploadId);
-  start.append("monthly_rent", rent);
-  start.append("consent", "true");
-  const res = await fetch("/api/checks", { method: "POST", body: start });
-  const data = await res.json().catch(() => null);
-  if (res.status === 202 && data?.id) {
-    onProgress(100);
-    return { ok: true, id: data.id as string };
-  }
-  return { ok: false, status: res.status, error: data?.error ?? FALLBACK_ERROR };
-}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
@@ -201,7 +151,7 @@ export function UploadForm() {
         <p>{limitReached.message}</p>
         <p className="text-muted">
           Tallied is free, so each person can run 3 checks a day. The files you chose weren&apos;t
-          uploaded or kept.
+          uploaded or kept. You can still try the samples below: they don&apos;t count towards the 3.
         </p>
       </StatePanel>
     );

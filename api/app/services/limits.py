@@ -58,6 +58,21 @@ def ip_hash(ip: str) -> str:
     return hmac.new(salt, ip.encode(), hashlib.sha256).hexdigest()
 
 
+def sample_ip_hash(ip: str) -> str:
+    """The key for the visitor's separate sample-check counter, in the same rate_limits table.
+    A different HMAC input, so it never collides with (or reveals) the real-check key."""
+    salt = get_settings().rate_limit_salt.encode()
+    return hmac.new(salt, f"sample:{ip}".encode(), hashlib.sha256).hexdigest()
+
+
+def limit_for(ip: str, sample: bool) -> tuple[str, int, str]:
+    """(rate-limit key, daily limit, error code) for a real or a sample check."""
+    s = get_settings()
+    if sample:
+        return sample_ip_hash(ip), s.sample_checks_per_ip_per_day, "sample_rate_limited"
+    return ip_hash(ip), s.checks_per_ip_per_day, "rate_limited"
+
+
 _CONSUME = text("""
     INSERT INTO rate_limits (ip_hash, day, count) VALUES (:h, :d, 1)
     ON CONFLICT (ip_hash, day) DO UPDATE SET count = rate_limits.count + 1
@@ -73,9 +88,10 @@ def checks_used_today(hashed: str) -> int:
     return row or 0
 
 
-def consume_check(hashed: str) -> bool:
-    """Count one check for this IP today. False if the daily limit was already reached."""
-    limit = get_settings().checks_per_ip_per_day
+def consume_check(hashed: str, limit: int | None = None) -> bool:
+    """Count one check for this key today. False if the daily limit was already reached."""
+    if limit is None:
+        limit = get_settings().checks_per_ip_per_day
     with session_scope() as s:
         return s.execute(_CONSUME, {"h": hashed, "d": today(), "limit": limit}).first() is not None
 

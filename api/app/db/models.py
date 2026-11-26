@@ -18,6 +18,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Date,
     DateTime,
     ForeignKey,
@@ -26,6 +27,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    false,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -56,6 +58,9 @@ class Check(Base):
     # Salted IP hash that paid for this check (as in rate_limits), kept ONLY while it is processing,
     # so a check interrupted by a restart can be given back. Cleared when the check ends.
     rate_limit_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Which sample this was (app/samples.py), or None for a real check. Sample checks use their own
+    # daily limit and are counted apart in analytics.
+    sample_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class PageImage(Base):
@@ -110,6 +115,8 @@ class Feedback(Base):
     follow_up: Mapped[str | None] = mapped_column(String(64), nullable=True)
     contact_id: Mapped[int | None] = mapped_column(
         ForeignKey("feedback_contacts.id", ondelete="SET NULL"), nullable=True)
+    # Feedback on a sample check's report (made-up documents), kept apart from launch metrics.
+    sample: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -123,5 +130,8 @@ class Event(Base):
     check_ref: Mapped[str] = mapped_column(String(32), index=True)
     # Small fixed vocabulary only (e.g. the verdict or the vote), never free text.
     detail: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # True for events about a sample check, so launch metrics can count real checks only.
+    sample: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(),
+                                         index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
                                                  index=True)

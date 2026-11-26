@@ -1,8 +1,8 @@
 """/uploads endpoints: chunked uploads for the web app (each request stays under 4.5 MB).
 
-    POST /uploads                      -> {"upload_id": ..., "max_chunk_bytes": ...}
+    POST /uploads[?sample=<id>]        -> {"upload_id": ..., "max_chunk_bytes": ...}
     POST /uploads/{id}/chunks          multipart: index, offset, name, chunk
-    POST /checks  (upload_id=..., monthly_rent, consent)   starts the check
+    POST /checks  (upload_id=..., monthly_rent, consent | sample)   starts the check
 """
 
 from __future__ import annotations
@@ -10,19 +10,22 @@ from __future__ import annotations
 from fastapi import APIRouter, File, Form, Request, UploadFile
 
 from app.config import get_settings
+from app.samples import get_sample
 from app.services.errors import ApiError
-from app.services.limits import checks_used_today, client_ip, ip_hash
+from app.services.limits import checks_used_today, client_ip, limit_for
 from app.services.uploads import MAX_CHUNK_BYTES, new_session, save_chunk
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 
 @router.post("", status_code=201)
-def create_upload(request: Request) -> dict:
+def create_upload(request: Request, sample: str | None = None) -> dict:
     settings = get_settings()
-    # Refuse before any bytes are sent if today's checks are already used up.
-    if checks_used_today(ip_hash(client_ip(request))) >= settings.checks_per_ip_per_day:
-        raise ApiError("rate_limited", checks_per_ip_per_day=settings.checks_per_ip_per_day)
+    # Refuse before any bytes are sent if today's checks (or sample checks) are already used up.
+    spec = get_sample(sample)
+    hashed, limit, code = limit_for(client_ip(request), sample=spec is not None)
+    if checks_used_today(hashed) >= limit:
+        raise ApiError(code, checks_per_ip_per_day=limit, sample_checks_per_ip_per_day=limit)
     return {"upload_id": new_session(), "max_chunk_bytes": MAX_CHUNK_BYTES,
             "max_files": settings.max_files, "max_file_mb": settings.max_file_mb}
 
