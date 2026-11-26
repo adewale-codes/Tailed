@@ -32,8 +32,17 @@ export function expectedVerdict(c: Case): string {
   return (JSON.parse(fs.readFileSync(file, "utf8")) as { expected_verdict: string }).expected_verdict;
 }
 
-/** Runs api/scripts/e2e_db.py (local databases only). */
+/**
+ * Runs api/scripts/e2e_db.py (local databases only). E2E_DB_COMMAND runs it another way, for example
+ * inside the API's Docker container: "docker exec tallied-api python scripts/e2e_db.py". It's split
+ * on spaces, so no argument in it may contain one.
+ */
 function db(...args: string[]): string {
+  const custom = process.env.E2E_DB_COMMAND?.trim();
+  if (custom) {
+    const [cmd, ...rest] = custom.split(/\s+/);
+    return execFileSync(cmd, [...rest, ...args], { encoding: "utf8" });
+  }
   return execFileSync("uv", ["run", "python", "scripts/e2e_db.py", ...args], { cwd: API_DIR, encoding: "utf8" });
 }
 

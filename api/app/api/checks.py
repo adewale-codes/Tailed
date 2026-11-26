@@ -20,7 +20,7 @@ from app.db.session import session_scope
 from app.services import analytics
 from app.services.errors import ApiError
 from app.services.limits import checks_used_today, client_ip, consume_check, ip_hash, new_check_id
-from app.services.processing import CHECK_LABELS, initial_progress, process_check
+from app.services.processing import CHECK_LABELS, initial_progress, run_check
 from app.services.uploads import claim_session, save_uploads
 
 router = APIRouter(prefix="/checks", tags=["checks"])
@@ -88,13 +88,13 @@ async def create_check(
             s.add(Check(id=check_id, created_at=now,
                         expires_at=now + timedelta(hours=settings.report_ttl_hours),
                         status="queued", progress=initial_progress(len(uploads)),
-                        monthly_rent=rent, file_count=len(uploads)))
+                        monthly_rent=rent, file_count=len(uploads), rate_limit_key=hashed))
     except BaseException:
         shutil.rmtree(folder, ignore_errors=True)
         raise
 
     analytics.record("check_started", check_id)
-    background.add_task(process_check, check_id, folder, uploads, rent)
+    background.add_task(run_check, check_id, folder, uploads, rent)
     return {"id": check_id, "status": "queued",
             "progress_url": f"/checks/{check_id}/progress", "report_url": f"/checks/{check_id}",
             "expires_at": (now + timedelta(hours=settings.report_ttl_hours)).isoformat()}
@@ -143,16 +143,17 @@ def get_report(check_id: str) -> JSONResponse:
         headers={"Cache-Control": "no-store"})
 
 
-@router.get("/{check_id}/pages/{file_key}/{page}.png")
+@router.get("/{check_id}/pages/{file_key}/{page}")
 def get_page(check_id: str, file_key: str, page: int) -> Response:
+    """Image of one page with a finding (WebP). Pages without a finding were never stored: 404."""
     _load(check_id)
     with session_scope() as s:
-        png = s.scalar(select(PageImage.png).where(PageImage.check_id == check_id,
-                                                    PageImage.file_key == file_key,
-                                                    PageImage.page == page))
-    if png is None:
+        row = s.execute(select(PageImage.image, PageImage.media_type)
+                        .where(PageImage.check_id == check_id, PageImage.file_key == file_key,
+                               PageImage.page == page)).first()
+    if row is None:
         raise ApiError("page_not_found")
-    return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
+    return Response(content=row.image, media_type=row.media_type, headers={"Cache-Control": "no-store"})
 
 
 # The follow-up question changes with the vote; answers are fixed choices, never free text.

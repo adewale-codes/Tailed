@@ -23,7 +23,10 @@ export default function PrivacyPage() {
       <Section title="The short version">
         <ul className="list-disc space-y-2 pl-5">
           <li>The documents you upload are deleted as soon as the check finishes.</li>
-          <li>The report, and the page images it shows, are deleted 24 hours after the check.</li>
+          <li>
+            The report, and the page images it shows, are deleted 24 hours after the check. Our database host keeps its
+            own disaster-recovery copies, which we explain below.
+          </li>
           <li>We don&apos;t use cookies, and we don&apos;t store your IP address.</li>
           <li>If you give us your email, we only use it to tell you when Tallied launches.</li>
         </ul>
@@ -52,13 +55,22 @@ export default function PrivacyPage() {
       <Section title="The report">
         <p>
           The report contains what we found, including figures, dates and names taken from the documents, plus images of
-          the pages so you can see the evidence. It also records the monthly rent you entered. Anyone with the report
-          link can open it, so only share it with people who should see it.
+          the pages where we found something, so you can see the evidence. We don&apos;t keep images of any other pages. It
+          also records the monthly rent you entered. Anyone with the report link can open it, so only share it with
+          people who should see it.
         </p>
         <p>
           The report and the page images are deleted 24 hours after the check. After that we keep only the report&apos;s
           random id and the times it was created and deleted, for up to 30 days, so the link can say that the report
           has been deleted.
+        </p>
+        <p>
+          There is one exception we can&apos;t control. Heroku, which hosts our database, automatically keeps its own
+          copies of the whole database so it can recover it after a serious failure: a snapshot at least once a day,
+          plus a record of every change since. These copies are kept in the same EU region, and they can include
+          reports and page images that existed when the copies were made. We can&apos;t open these copies ourselves, and
+          Heroku doesn&apos;t say how long it keeps them, so we can&apos;t promise when they are deleted. We don&apos;t make
+          any other backups of reports.
         </p>
       </Section>
 
@@ -74,10 +86,9 @@ export default function PrivacyPage() {
             name shown on the payslip.
           </li>
           <li>
-            <span className="font-medium">Hetzner and Vercel.</span> Our server and database run on our own server
-            at Hetzner, in the EU ([Hetzner location, for example: Falkenstein, Germany]). This website runs on
-            Vercel: your documents pass through it on their way to our server, and the website doesn&apos;t keep
-            them.
+            <span className="font-medium">Heroku and Vercel.</span> Our server and database run on Heroku (part of
+            Salesforce), in its Europe region in Ireland, in the EU. This website runs on Vercel: your documents pass
+            through it on their way to our server, and the website doesn&apos;t keep them.
           </li>
         </ul>
       </Section>

@@ -1,0 +1,15 @@
+# Heroku container stack manifest for the Tallied API (the web app is on Vercel, not here).
+# `heroku stack:set container`, then `git push heroku main` builds api/Dockerfile. See DEPLOY.md.
+build:
+  docker:
+    # Build context is the folder holding the Dockerfile (api/), so web/ and fixtures/ never enter
+    # the image.
+    web: api/Dockerfile
+release:
+  # Runs in a one-off dyno before each new release goes live. If a migration fails, the release is
+  # abandoned and the previous one keeps serving. (scripts/start.sh also runs it on boot; a no-op then.)
+  image: web
+  command:
+    - alembic upgrade head
+# No `run` section: the web dyno uses the Dockerfile's CMD (sh scripts/start.sh), which listens on
+# $PORT with --no-proxy-headers.

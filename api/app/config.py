@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # Uploads are written only under this folder, and deleted when processing ends.
     upload_temp_dir: str = str(Path(tempfile.gettempdir()) / "tallied-uploads")
     cleanup_interval_minutes: int = 10
+    # Checks processed at the same time; the rest wait as "queued". A maximum-size check (12 files x
+    # 28 pages) peaks at about 430 MB, and two at once were OOM-killed in a 512 MB container (the
+    # Heroku Basic dyno size), so keep this at 1 unless the dyno has more memory.
+    max_concurrent_checks: int = 1
 
     # Comma-separated list of origins allowed to call the API (the web app).
     cors_origins: str = "http://localhost:3000"

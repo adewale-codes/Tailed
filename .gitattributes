@@ -1,0 +1,4 @@
+# Shell scripts run inside the Linux container (api/scripts/start.sh is the web dyno's command).
+# Keep them LF even on Windows checkouts with core.autocrlf=true, or `sh` fails with
+# "set: Illegal option -" when the image is built locally.
+*.sh text eol=lf

@@ -98,13 +98,49 @@ def test_full_run(client, settings, monkeypatch) -> None:
     assert body["report"]["affordability"]["rent_pct_of_payslip_net"] == "41.5"
     keys = {f["key"] for f in body["files"]}
     assert keys == {"1", "2", "3", "4", "5"}
-    assert all(f["images"] for f in body["files"])
+    # Nothing flagged, so no page images at all: only pages with a finding are stored.
+    assert all(f["images"] == [] for f in body["files"])
+    assert progress["preview"] is None
+    assert client.get(f"/checks/{check_id}/pages/3/1").json()["error"]["code"] == "page_not_found"
 
-    png = client.get(f"/checks/{check_id}/pages/3/1.png")
-    assert png.status_code == 200 and png.headers["content-type"] == "image/png"
-    assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
-    assert png.headers["cache-control"] == "no-store"
-    assert client.get(f"/checks/{check_id}/pages/3/9.png").json()["error"]["code"] == "page_not_found"
+
+def evidence_view_pages(body: dict) -> set[tuple[str, int]]:
+    """Pages the web evidence view opens: same rule as findingsOf() in web/src/lib/report.ts."""
+    return {(e["file"], e.get("page") or 1)
+            for c in body["report"]["checks"] if c["status"] == "flag"
+            for e in c["evidence"] if e["flag"] and e.get("file")}
+
+
+@pytest.mark.parametrize("case", ["edited_balance", "salary_mismatch", "bad_payslip", "name_mismatch",
+                                  "edited_metadata", "multiple_problems", "genuine"])
+def test_every_evidence_page_is_stored_as_webp_and_nothing_else(client, settings, db, case) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    check_id = upload(client, fixture_files(case)).json()["id"]
+    body = client.get(f"/checks/{check_id}").json()
+    want = evidence_view_pages(body)
+    assert bool(want) == (case != "genuine")
+    stored = {(k, p) for k, p in sql(db, "SELECT file_key, page FROM page_images WHERE check_id = :id",
+                                     id=check_id)}
+    assert stored == want  # every page the evidence view needs, and no other page
+    listed = {(f["key"], i["page"]) for f in body["files"] for i in f.get("images", [])}
+    assert listed == want
+    for file_key, page in want:
+        res = client.get(f"/checks/{check_id}/pages/{file_key}/{page}")
+        assert res.status_code == 200 and res.headers["content-type"] == "image/webp"
+        assert res.headers["cache-control"] == "no-store"
+        with Image.open(BytesIO(res.content)) as img:
+            assert img.format == "WEBP"
+            pages = next(f for f in body["files"] if f["key"] == file_key)["pages"]
+            pdf_page = next(p for p in pages if p["page"] == page)
+            assert round(img.width / pdf_page["width"] * 72) == processing.PAGE_DPI  # readable size
+    progress = client.get(f"/checks/{check_id}/progress").json()
+    if want:  # the checking screen previews the first finding page
+        assert (progress["preview"]["file"], progress["preview"]["page"]) in want
+    else:
+        assert progress["preview"] is None
 
 
 def test_report_shows_evidence_with_file_keys(client, settings) -> None:
@@ -143,7 +179,7 @@ def test_one_unreadable_file_is_reported_not_fatal(client, settings) -> None:
     assert [f["status"] for f in progress["files"]] == ["read"] * 5 + ["unreadable"]
     assert progress["files"][5] == {"key": "6", "status": "unreadable", "code": "unreadable_file",
                                     "message": progress["files"][5]["message"]}
-    assert progress["preview"] == {"file": "1", "page": 1}
+    assert progress["preview"] is None  # nothing flagged, so no page image to preview
     assert "broken.pdf" not in json.dumps(progress)
     body = client.get(f"/checks/{check_id}").json()
     broken = next(f for f in body["files"] if f["name"] == "broken.pdf")
@@ -288,7 +324,7 @@ def test_report_older_than_24_hours_is_410(client, settings, db) -> None:
     _age(db, check_id, 25)
     # Even before the cleanup job runs, nothing is served
     for path in (f"/checks/{check_id}", f"/checks/{check_id}/progress",
-                 f"/checks/{check_id}/pages/1/1.png"):
+                 f"/checks/{check_id}/pages/1/1"):
         res = client.get(path)
         assert res.status_code == 410, path
         assert res.json()["error"]["code"] == "check_expired"
@@ -297,10 +333,11 @@ def test_report_older_than_24_hours_is_410(client, settings, db) -> None:
 
 
 def test_cleanup_deletes_report_and_page_images(client, settings, db) -> None:
-    keep = upload(client).json()["id"]
-    old = upload(client).json()["id"]
+    keep = upload(client, fixture_files("multiple_problems")).json()["id"]
+    old = upload(client, fixture_files("multiple_problems")).json()["id"]
     _age(db, old, 25)
-    assert sql(db, "SELECT count(*) FROM page_images WHERE check_id = :id", id=old)[0][0] == 8
+    stored = sql(db, "SELECT count(*) FROM page_images WHERE check_id = :id", id=old)[0][0]
+    assert stored > 0
 
     result = run_cleanup()
     assert result.wiped == 1
@@ -310,7 +347,7 @@ def test_cleanup_deletes_report_and_page_images(client, settings, db) -> None:
     assert client.get(f"/checks/{old}").status_code == 410
     # the newer check is untouched
     assert client.get(f"/checks/{keep}").status_code == 200
-    assert sql(db, "SELECT count(*) FROM page_images WHERE check_id = :id", id=keep)[0][0] == 8
+    assert sql(db, "SELECT count(*) FROM page_images WHERE check_id = :id", id=keep)[0][0] == stored
     assert run_cleanup().wiped == 0  # idempotent
 
 
@@ -501,7 +538,7 @@ def test_web_proxy_client_ip_trusted_only_with_secret(client, settings, monkeypa
 
 
 def test_forwarded_headers_from_a_reverse_proxy_are_ignored(client, settings, monkeypatch) -> None:
-    """Behind Coolify's Traefik: whatever forwarded headers arrive, only the web app's secret
+    """Behind Heroku's router: whatever forwarded headers arrive, only the web app's secret
     header can name the visitor. Everything else counts against the connecting address."""
     monkeypatch.setattr(settings, "web_proxy_secret", "s3cret-value")
     spoofed = lambda n: {  # noqa: E731
@@ -675,3 +712,140 @@ def test_upload_session_refused_when_daily_limit_used(client, settings) -> None:
     res = client.post("/uploads")
     assert res.status_code == 429 and res.json()["error"]["code"] == "rate_limited"
     assert temp_contents(settings) == []
+
+
+# ---------------------------------------------------------------------------
+# Memory bound: one check processed at a time (Heroku Basic dyno, 512 MB)
+# ---------------------------------------------------------------------------
+
+
+def test_checks_are_processed_one_at_a_time(monkeypatch) -> None:
+    import asyncio
+    import threading
+
+    running, most = 0, 0
+    lock = threading.Lock()
+
+    def fake_process(*_args) -> None:
+        nonlocal running, most
+        with lock:
+            running += 1
+            most = max(most, running)
+        time.sleep(0.2)
+        with lock:
+            running -= 1
+
+    monkeypatch.setattr(processing, "process_check", fake_process)
+
+    async def three_at_once() -> None:
+        await asyncio.gather(*(processing.run_check(f"id{n}", Path("."), [], None) for n in range(3)))
+
+    asyncio.run(three_at_once())
+    assert most == 1
+
+
+def test_check_failed_while_queued_is_not_restarted(settings, db, tmp_path) -> None:
+    """If the cleanup gives up on a check that waited too long, a worker must not revive it."""
+    with TestClient(app) as c:
+        check_id = upload(c).json()["id"]
+    sql(db, "UPDATE checks SET status = 'failed', error_code = 'internal_error', progress = NULL "
+            "WHERE id = :id", id=check_id)
+    folder = tmp_path / "queued-upload"
+    folder.mkdir()
+    (folder / "1.upload").write_bytes(b"%PDF-")
+    processing.process_check(check_id, folder, [], None)
+    assert sql(db, "SELECT status, progress FROM checks WHERE id = :id", id=check_id)[0] == ("failed", None)
+    assert not folder.exists()
+
+
+# ---------------------------------------------------------------------------
+# Restarts: checks the previous process was running are failed at startup, and given back
+# ---------------------------------------------------------------------------
+
+
+def test_startup_fails_interrupted_checks_and_gives_the_check_back(settings, db) -> None:
+    with TestClient(app) as c:
+        finished = upload(c).json()["id"]
+        interrupted = upload(c).json()["id"]
+        queued = upload(c).json()["id"]
+        assert upload(c).status_code == 429  # 3 used today
+    # The link to the visitor's hash is gone once a check ends...
+    assert sql(db, "SELECT count(*) FROM checks WHERE rate_limit_key IS NOT NULL")[0][0] == 0
+    # ...so simulate two checks a restart killed: still processing, with their key.
+    hashed = sql(db, "SELECT ip_hash FROM rate_limits")[0][0]
+    for check_id, status in ((interrupted, "checking"), (queued, "queued")):
+        sql(db, "UPDATE checks SET status = :s, report = NULL, rate_limit_key = :h WHERE id = :id",
+            s=status, h=hashed, id=check_id)
+
+    with TestClient(app) as c:  # the API starts again
+        for check_id in (interrupted, queued):
+            progress = c.get(f"/checks/{check_id}/progress").json()
+            assert progress["status"] == "failed" and progress["stage"] == "failed"
+            assert progress["error"] == {
+                "code": "check_interrupted",
+                "message": "Something interrupted this check. Please try again. "
+                           "This one hasn't counted towards today's limit."}
+            assert c.get(f"/checks/{check_id}").json()["error"]["code"] == "check_interrupted"
+        assert c.get(f"/checks/{finished}").status_code == 200  # finished checks are untouched
+        assert sql(db, "SELECT count FROM rate_limits")[0][0] == 1  # both checks given back
+        assert sql(db, "SELECT count(*) FROM checks WHERE rate_limit_key IS NOT NULL")[0][0] == 0
+        assert [upload(c).status_code for _ in range(3)] == [202, 202, 429]
+    assert sql(db, "SELECT count(*) FROM events WHERE name = 'check_failed' AND detail = 'interrupted'"
+               )[0][0] == 2
+
+
+def test_startup_refund_never_goes_below_zero_or_touches_other_days(settings, db) -> None:
+    with TestClient(app) as c:
+        check_id = upload(c).json()["id"]
+    hashed = sql(db, "SELECT ip_hash FROM rate_limits")[0][0]
+    sql(db, "UPDATE rate_limits SET day = day - 1")  # the count is from yesterday, not the check's day
+    sql(db, "UPDATE checks SET status = 'reading', rate_limit_key = :h WHERE id = :id", h=hashed, id=check_id)
+    with TestClient(app):
+        pass
+    assert sql(db, "SELECT count FROM rate_limits")[0][0] == 1
+    assert sql(db, "SELECT status FROM checks WHERE id = :id", id=check_id)[0][0] == "failed"
+
+
+def test_check_records_the_rate_limit_key_only_while_processing(client, settings, db, monkeypatch) -> None:
+    seen: list = []
+    real = processing.process_check
+
+    def spy(check_id, *args, **kwargs):
+        seen.append(sql(db, "SELECT rate_limit_key FROM checks WHERE id = :id", id=check_id)[0][0])
+        real(check_id, *args, **kwargs)
+
+    monkeypatch.setattr(processing, "process_check", spy)
+    check_id = upload(client).json()["id"]
+    assert seen == [sql(db, "SELECT ip_hash FROM rate_limits")[0][0]]
+    assert sql(db, "SELECT rate_limit_key FROM checks WHERE id = :id", id=check_id)[0][0] is None
+
+
+def test_cleanup_fails_stuck_checks_and_gives_the_check_back(settings, db) -> None:
+    from app.services.cleanup import STUCK_MESSAGE
+
+    with TestClient(app) as c:
+        stuck, recent, _ = (upload(c).json()["id"] for _ in range(3))
+        assert upload(c).status_code == 429  # 3 used today
+    hashed = sql(db, "SELECT ip_hash FROM rate_limits")[0][0]
+    for check_id in (stuck, recent):  # both still processing, as if a worker hung
+        sql(db, "UPDATE checks SET status = 'checking', report = NULL, rate_limit_key = :h WHERE id = :id",
+            h=hashed, id=check_id)
+    # Run the cleanup 20 minutes from now: `stuck` is then over 15 minutes old, `recent` isn't.
+    sql(db, "UPDATE checks SET created_at = now() + interval '10 minutes' WHERE id = :id", id=recent)
+    later = datetime.now(UTC) + timedelta(minutes=20)
+
+    result = run_cleanup(now=later)
+    assert (result.stuck_failed, result.stuck_refunded) == (1, 1)
+    row = sql(db, "SELECT status, error_code, error_message, rate_limit_key, progress->>'stage' "
+                  "FROM checks WHERE id = :id", id=stuck)[0]
+    assert row == ("failed", "internal_error", STUCK_MESSAGE, None, "failed")
+    untouched = sql(db, "SELECT status, rate_limit_key FROM checks WHERE id = :id", id=recent)[0]
+    assert untouched == ("checking", hashed)
+    assert sql(db, "SELECT count FROM rate_limits")[0][0] == 2  # one check given back
+
+    again = run_cleanup(now=later)  # never given back twice
+    assert (again.stuck_failed, again.stuck_refunded) == (0, 0)
+    assert sql(db, "SELECT count FROM rate_limits")[0][0] == 2
+    with TestClient(app) as c:
+        progress = c.get(f"/checks/{stuck}/progress").json()
+        assert progress["status"] == "failed" and progress["error"]["message"] == STUCK_MESSAGE

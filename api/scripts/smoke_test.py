@@ -86,15 +86,19 @@ def check_report(web: httpx.Client, case: str, report: dict) -> dict:
        f"got {r['verdict']}, expected {want['expected_verdict']}")
     expected_flags = sorted(k for k, v in want["expected_checks"].items() if v == "flag")
     ok(f"{case}: flagged checks", sorted(flags) == expected_flags, ", ".join(flags) or "none")
+    # Every page the evidence view shows (same rule as findingsOf in web/src/lib/report.ts).
     images = 0
     for c in r["checks"]:
+        if c["status"] != "flag":
+            continue
         for e in c["evidence"]:
-            if e["flag"] and e.get("page") and e.get("bboxes"):
-                img = web.get(f"/api/checks/{report['id']}/pages/{e['file']}/{e['page']}")
-                good = img.status_code == 200 and img.headers.get("content-type") == "image/png"
+            if e["flag"] and e.get("file"):
+                page = e.get("page") or 1
+                img = web.get(f"/api/checks/{report['id']}/pages/{e['file']}/{page}")
+                good = img.status_code == 200 and img.headers.get("content-type") == "image/webp"
                 images += 1
                 if not good:
-                    ok(f"{case}: evidence image {e['file']}/{e['page']}", False, f"HTTP {img.status_code}")
+                    ok(f"{case}: evidence image {e['file']}/{page}", False, f"HTTP {img.status_code}")
     if images:
         ok(f"{case}: all {images} evidence page images load", True)
     return {"case": case, "verdict": r["verdict"], "expected": want["expected_verdict"],
@@ -112,7 +116,7 @@ def check_site(web: httpx.Client, api: httpx.Client | None) -> None:
     privacy = web.get("/privacy")
     ok("privacy page loads", privacy.status_code == 200 and "24 hours" in privacy.text,
        f"HTTP {privacy.status_code}")
-    placeholders = ["[privacy@your-domain.co.uk]", "[Your name or company name]", "[Hetzner location"]
+    placeholders = ["[privacy@your-domain.co.uk]", "[Your name or company name]", "[number]", "[date]"]
     leaked = any(p in privacy.text for p in placeholders)
     ok("privacy placeholders filled in", not leaked, "still has [placeholders]" if leaked else "")
     robots = web.get("/robots.txt")
@@ -129,7 +133,7 @@ def check_site(web: httpx.Client, api: httpx.Client | None) -> None:
     cors = api.options("/checks", headers={"Origin": "https://evil.example",
                                            "Access-Control-Request-Method": "POST"})
     ok("API CORS refuses other origins", "access-control-allow-origin" not in cors.headers)
-    boom = api.get("/checks/" + "x" * 43 + "/pages/1/999999999999999999999.png")
+    boom = api.get("/checks/" + "x" * 43 + "/pages/1/999999999999999999999")
     ok("API errors are JSON with no stack trace",
        "error" in boom.json() and "Traceback" not in boom.text and 'File "' not in boom.text,
        f"HTTP {boom.status_code}")

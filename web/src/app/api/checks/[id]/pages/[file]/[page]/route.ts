@@ -1,6 +1,6 @@
 import { API_UNREACHABLE, apiUrl, errorResponse, isCheckId, relay } from "@/lib/api-server";
 
-/** GET /api/checks/{id}/pages/{file}/{page}: a rendered page image (PNG). */
+/** GET /api/checks/{id}/pages/{file}/{page}: the image (WebP) of a page with a finding. */
 export async function GET(
   _request: Request,
   ctx: RouteContext<"/api/checks/[id]/pages/[file]/[page]">,
@@ -10,7 +10,7 @@ export async function GET(
     return errorResponse(404, "page_not_found", "We couldn't find that page.");
   }
   try {
-    return relay(await fetch(apiUrl(`/checks/${id}/pages/${file}/${page}.png`), { cache: "no-store" }));
+    return relay(await fetch(apiUrl(`/checks/${id}/pages/${file}/${page}`), { cache: "no-store" }));
   } catch {
     return API_UNREACHABLE();
   }

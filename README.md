@@ -9,7 +9,7 @@ web/       Next.js (App Router, TypeScript), Tailwind, Framer Motion
 fixtures/  Synthetic test documents + generator (see fixtures/README.md)
 ```
 
-Deploying (API and Postgres on Hetzner with Coolify, web app on Vercel), every environment variable, and the pre-launch checklist: see
+Deploying (API and Postgres on Heroku in the EU, web app on Vercel), every environment variable, and the pre-launch checklist: see
 [DEPLOY.md](DEPLOY.md).
 
 ## Prerequisites
@@ -40,7 +40,7 @@ http://localhost:8000/docs.
 | POST | `/checks` | Multipart: `files` (1-12 PDF/JPG/PNG, 10 MB each) or `upload_id`, plus `monthly_rent`, `consent=true`. Returns an id; processing runs in the background |
 | GET | `/checks/{id}/progress` | Which of the seven checks are done (poll this) |
 | GET | `/checks/{id}` | The finished report (202 while processing, 410 after 24 hours) |
-| GET | `/checks/{id}/pages/{file}/{page}.png` | Rendered page image for the evidence view |
+| GET | `/checks/{id}/pages/{file}/{page}` | Image (WebP) of a page with a finding, for the evidence view. Only those pages are stored |
 | POST | `/checks/{id}/feedback` | `{"vote": "up"\|"down", "follow_up"?, "comment"?, "email"?}` |
 | POST | `/checks/{id}/events` | `{"name": "report_viewed"\|"evidence_opened"}` (analytics, no cookies) |
 
@@ -60,7 +60,28 @@ uv run ruff check . ../fixtures
 ```
 
 The cleanup job runs inside the API every `CLEANUP_INTERVAL_MINUTES`. It can also run on its own
-(in production, a Coolify scheduled task): `uv run python -m app.services.cleanup`.
+(in production, a Heroku Scheduler job every 10 minutes): `uv run python -m app.services.cleanup`.
+
+Checks are processed one at a time (`MAX_CONCURRENT_CHECKS=1`); others wait as `queued`. That keeps
+the API under the 512 MB of a Heroku Basic dyno (see DEPLOY.md, "Memory").
+
+**Windows note:** if Smart App Control / Windows Application Control is on, it blocks unsigned DLLs
+that the API needs (Python's `_ssl`, psycopg's `libpq`), so tests fail with "An Application Control
+policy has blocked this file". Run the tests in Docker instead (Linux, like Heroku):
+
+```bash
+docker network create tallied-test
+docker run -d --name tallied-pg --network tallied-test -e POSTGRES_USER=tallied -e POSTGRES_PASSWORD=tallied \
+  -e POSTGRES_DB=tallied -v "$PWD/api/scripts/create_test_db.sql:/docker-entrypoint-initdb.d/t.sql:ro" postgres:16.6
+docker run --rm --network tallied-test -v "$PWD:/repo:ro" -v tallied-venv:/venv -e UV_PROJECT_ENVIRONMENT=/venv \
+  -e PYTHONDONTWRITEBYTECODE=1 -e TEST_DATABASE_URL=postgresql+psycopg://tallied:tallied@tallied-pg:5432/tallied_test \
+  -w /repo/api ghcr.io/astral-sh/uv:0.9.28-python3.12-bookworm-slim \
+  sh -c 'uv sync --frozen -q && uv run --no-sync python -m pytest -q -p no:cacheprovider && uv run --no-sync ruff check --no-cache . ../fixtures'
+```
+
+Antivirus that scans HTTPS (Norton, for example) breaks downloads inside containers and uv with
+`invalid peer certificate: UnknownIssuer`: export its root certificate and pass it as `SSL_CERT_FILE`
+(or use `uv --system-certs` on Windows).
 
 ## Web
 
@@ -117,6 +138,22 @@ Options (environment variables): `E2E_BASE_URL` (default `http://127.0.0.1:3000`
 (default `http://127.0.0.1:8000`), and `E2E_BROWSER_CHANNEL=msedge` (or `chrome`) to use an installed
 browser instead of downloading Chromium. A full run takes about 5 minutes; failures keep a screenshot
 and trace in `web/test-results/` (`npx playwright show-trace <file>`).
+
+`E2E_DB_COMMAND` runs `scripts/e2e_db.py` some other way than `uv run`. Use it when the API runs in
+Docker (for example on Windows with Application Control on, see above). Postgres and the API share
+one network namespace, so the database is still `127.0.0.1` and `e2e_db.py`'s local-only guard holds:
+
+```bash
+# from the repository root, after building the image: docker build -t tallied-api api
+docker run -d --name tallied-pg -p 127.0.0.1:55432:5432 -p 127.0.0.1:8000:8000 -e POSTGRES_USER=tallied \
+  -e POSTGRES_PASSWORD=tallied -e POSTGRES_DB=tallied postgres:16.6
+docker run -d --name tallied-api --network container:tallied-pg -e PORT=8000 -e RATE_LIMIT_SALT=e2e \
+  -e DATABASE_URL=postgresql+psycopg://tallied:tallied@127.0.0.1:5432/tallied tallied-api
+docker cp api/scripts/e2e_db.py tallied-api:/app/scripts/e2e_db.py    # not in the image
+cd web && npm run build && API_URL=http://127.0.0.1:8000 npm run start -- -H 127.0.0.1    # leave running
+# in another terminal:
+cd web && E2E_BROWSER_CHANNEL=msedge E2E_DB_COMMAND="docker exec tallied-api python scripts/e2e_db.py" npm run test:e2e
+```
 
 ## Fixtures
 

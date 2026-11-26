@@ -44,7 +44,9 @@ class SavedUpload:
 
 def temp_root() -> Path:
     root = Path(get_settings().upload_temp_dir)
-    root.mkdir(parents=True, exist_ok=True)
+    # Created at runtime by whichever user the app runs as (Heroku ignores the Dockerfile's USER).
+    # 700: only that user can list or read uploads.
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
     return root
 
 

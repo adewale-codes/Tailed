@@ -2,7 +2,8 @@
 
 Privacy by design:
 - `checks` holds the report for 24 hours. After that the cleanup job wipes the report, progress
-  and page images and leaves only a tombstone (id + timestamps), so GET can answer 410.
+  and page images and leaves only a tombstone (id + timestamps), so GET can answer 410. Page images
+  exist only for pages with a finding.
 - No IP addresses are stored anywhere: `rate_limits` keys on a salted hash.
 - Feedback has no foreign key to `checks`, and emails live in their own table, so deleting a
   report never deletes or exposes them, and a report never contains them.
@@ -52,6 +53,9 @@ class Check(Base):
     error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     wiped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Salted IP hash that paid for this check (as in rate_limits), kept ONLY while it is processing,
+    # so a check interrupted by a restart can be given back. Cleared when the check ends.
+    rate_limit_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
 
 class PageImage(Base):
@@ -63,7 +67,9 @@ class PageImage(Base):
     page: Mapped[int] = mapped_column(Integer)
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
-    png: Mapped[bytes] = mapped_column(LargeBinary)
+    # Only pages the evidence view shows (pages with a finding), as WebP.
+    image: Mapped[bytes] = mapped_column(LargeBinary)
+    media_type: Mapped[str] = mapped_column(String(32), default="image/webp", server_default="image/png")
 
 
 class RateLimit(Base):

@@ -15,7 +15,7 @@ from app.ai_guard import set_guard
 from app.api.checks import router as checks_router
 from app.api.uploads import router as uploads_router
 from app.config import get_settings
-from app.services.cleanup import run_cleanup
+from app.services.cleanup import fail_interrupted_checks, run_cleanup
 from app.services.errors import MESSAGES, ApiError
 from app.services.limits import reserve_ai_call
 from app.services.uploads import MAX_CHUNK_BYTES
@@ -49,6 +49,11 @@ async def _cleanup_loop(minutes: int) -> None:
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     set_guard(reserve_ai_call)
+    # Checks the previous process was running can't finish: fail them now and refund the visitor.
+    try:
+        await run_in_threadpool(fail_interrupted_checks)
+    except Exception as exc:  # never stop the API from starting
+        log.error("startup.interrupted_checks_error type=%s", type(exc).__name__)
     task = None
     if get_settings().cleanup_interval_minutes > 0:
         task = asyncio.create_task(_cleanup_loop(get_settings().cleanup_interval_minutes))

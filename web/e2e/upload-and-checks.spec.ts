@@ -61,7 +61,9 @@ test.describe("upload screen and live checks", () => {
     await expect(rows).toHaveCount(7);
     for (const text of await rows.allInnerTexts()) expect(text).not.toMatch(/Waiting|Checking…/);
     await expect(page.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
-    expect(await page.locator("figure img").evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
+    // Only pages with a finding are rendered and stored. Nothing is flagged here, so the preview keeps
+    // its drawn placeholder rather than showing a page image.
+    await expect(page.locator("figure img")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 
     await viewReport.click();
