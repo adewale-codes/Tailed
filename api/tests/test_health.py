@@ -38,8 +38,12 @@ def test_interactive_docs_are_off_in_production() -> None:
     import subprocess
     import sys
 
-    code = ("import os; os.environ['ENVIRONMENT']='production'; "
+    # Through the web app (with the proxy secret) the docs don't exist; without it, everything but
+    # /health is refused before routing.
+    code = ("import os; os.environ['ENVIRONMENT']='production'; os.environ['WEB_PROXY_SECRET']='s'*40; "
             "from fastapi.testclient import TestClient; from app.main import app; c=TestClient(app); "
-            "print(*(c.get(p).status_code for p in ['/docs', '/openapi.json', '/health']))")
+            "h={'X-Tallied-Proxy-Secret': 's'*40}; "
+            "print(*(c.get(p, headers=h).status_code for p in ['/docs', '/openapi.json', '/health']), "
+            "*(c.get(p).status_code for p in ['/docs', '/health']))")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert out.stdout.split() == ["404", "404", "200"]
+    assert out.stdout.split() == ["404", "404", "200", "403", "200"]

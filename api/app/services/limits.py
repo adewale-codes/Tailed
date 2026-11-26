@@ -32,11 +32,17 @@ def today() -> date:
     return datetime.now(UTC).date()
 
 
+def has_proxy_secret(request: Request) -> bool:
+    """True if the request carries X-Tallied-Proxy-Secret equal to WEB_PROXY_SECRET, which only the
+    web app's server-side routes have. Constant-time comparison (hmac.compare_digest)."""
+    secret = get_settings().web_proxy_secret
+    sent = request.headers.get("x-tallied-proxy-secret", "")
+    return bool(secret) and hmac.compare_digest(sent.encode(), secret.encode())
+
+
 def client_ip(request: Request) -> str:
     settings = get_settings()
-    secret = settings.web_proxy_secret
-    sent = request.headers.get("x-tallied-proxy-secret", "")
-    if secret and sent and hmac.compare_digest(sent.encode(), secret.encode()):
+    if has_proxy_secret(request):
         forwarded_ip = request.headers.get("x-tallied-client-ip", "").strip()
         if forwarded_ip:
             return forwarded_ip

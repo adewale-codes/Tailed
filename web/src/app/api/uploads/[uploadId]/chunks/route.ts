@@ -1,4 +1,4 @@
-import { API_UNREACHABLE, apiUrl, errorResponse, isCheckId, relay } from "@/lib/api-server";
+import { API_UNREACHABLE, apiFetch, errorResponse, isCheckId, relay } from "@/lib/api-server";
 
 // Each piece is at most 3.5 MB plus form overhead, under Vercel's 4.5 MB request cap.
 const MAX_BODY_BYTES = 4 * 1024 * 1024 + 64 * 1024;
@@ -21,13 +21,12 @@ export async function POST(
     return errorResponse(413, "chunk_too_large", "That piece of the upload was too large.");
   }
   try {
-    const res = await fetch(apiUrl(`/uploads/${uploadId}/chunks`), {
+    const res = await apiFetch(request, `/uploads/${uploadId}/chunks`, {
       method: "POST",
       headers: { "Content-Type": type, ...(length ? { "Content-Length": String(length) } : {}) },
       body: request.body,
       duplex: "half",
-      cache: "no-store",
-    } as RequestInit & { duplex: "half" });
+    });
     return relay(res);
   } catch {
     return API_UNREACHABLE();

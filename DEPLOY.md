@@ -59,7 +59,8 @@ python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
 - **Secret A**: `RATE_LIMIT_SALT` (API only)
-- **Secret B**: `WEB_PROXY_SECRET` (the same value on the API and on Vercel)
+- **Secret B**: `WEB_PROXY_SECRET` (the same value on the API and on Vercel). The API refuses every
+  request except `GET /health` without it, and won't start in production if it's under 32 characters.
 
 ## 2. Heroku account and CLI
 
@@ -151,7 +152,7 @@ Check it from your laptop:
 
 ```bash
 curl https://YOUR-APP-xxxx.herokuapp.com/health                                   # {"status":"ok"}
-curl -s -o /dev/null -w "%{http_code}\n" https://YOUR-APP-xxxx.herokuapp.com/docs  # 404 in production
+curl -s -o /dev/null -w "%{http_code}\n" https://YOUR-APP-xxxx.herokuapp.com/docs  # 403: direct calls are refused
 heroku logs --tail -a YOUR-APP        # Ctrl+C to stop; expect "cleanup.done ..." shortly after boot
 ```
 
@@ -182,8 +183,8 @@ Taken from `api/.env.example` and `web/.env.example`.
 | `REPORT_TTL_HOURS` | `24` | Keep at 24: the privacy page promises it |
 | `CHECKS_PER_IP_PER_DAY` | `3` | Raise temporarily for the smoke test (section 8) |
 | `RATE_LIMIT_SALT` | Secret A | Secret. Never change it after launch, or today's counts reset |
-| `TRUST_PROXY_HEADERS` | `false` | Keep false. See "IP addresses behind Heroku's router" below |
-| `WEB_PROXY_SECRET` | Secret B | Secret. Must match Vercel |
+| `TRUST_PROXY_HEADERS` | `false` | Keep false. See "Only the web app can call the API" below |
+| `WEB_PROXY_SECRET` | Secret B | Secret. **Required**: the API won't start in production without it (at least 32 characters). Must match Vercel. See "Only the web app can call the API" |
 | `UPLOAD_TEMP_DIR` | leave unset | The Dockerfile sets `/tmp/tallied-uploads`, on the dyno's ephemeral disk |
 | `CLEANUP_INTERVAL_MINUTES` | `10` | In-app cleanup loop. It's the only thing that clears the web dyno's temp folder |
 | `MAX_CONCURRENT_CHECKS` | `1` | Keep 1 on a Basic dyno (512 MB). See "Memory" in section 9 |
@@ -193,33 +194,46 @@ Taken from `api/.env.example` and `web/.env.example`.
 | Variable | Value | Notes |
 |---|---|---|
 | `API_URL` | `https://YOUR-APP-xxxx.herokuapp.com` | The web URL from `heroku info`. Server-side only |
-| `WEB_PROXY_SECRET` | Secret B | Same as the API. Server-side only |
+| `WEB_PROXY_SECRET` | Secret B | **Required**, same value as the API. Server-side only. Without it, every call to the API gets 403 |
 | `TRUST_FORWARDED_FOR` | leave unset | Only for hosts other than Vercel. On Vercel the visitor's IP comes from `x-real-ip` |
 
-### IP addresses behind Heroku's router
+### Only the web app can call the API
 
-Every request reaches the dyno through Heroku's router, which adds `X-Forwarded-For`,
-`X-Forwarded-Proto` and similar headers. The API ignores all of them:
+Heroku's router reaches the dyno from a different internal address on almost every request (seen
+in the logs: `10.1.37.85`, `10.1.17.68`, `10.1.1.237`). So the connecting address can't be used to
+count anyone's daily checks: 4 direct `POST /checks` calls all got 202. Therefore, in production:
 
-- uvicorn starts with `--no-proxy-headers` (`api/scripts/start.sh`), so it never takes the client
-  address from a forwarded header. A test checks this flag stays.
-- `TRUST_PROXY_HEADERS=false`, so the app ignores `X-Forwarded-For` too.
-- A visitor's IP is used only when the request carries `X-Tallied-Proxy-Secret` equal to
-  `WEB_PROXY_SECRET`, which only Vercel's server-side routes have. They send the visitor's IP in
-  `X-Tallied-Client-IP`.
+- **Every request except `GET /health` must carry `X-Tallied-Proxy-Secret` equal to
+  `WEB_PROXY_SECRET`.** Anything else gets `403 {"error": {"code": "forbidden", ...}}` before it
+  reaches any route, uses a daily check, or writes anything. The comparison is constant-time.
+  `GET /health` stays open for uptime monitors.
+- Only the web app's server-side routes have the secret. Every one of them calls the API through
+  `apiFetch` in `web/src/lib/api-server.ts`, which always adds it, plus the visitor's IP from
+  Vercel's `x-real-ip` in `X-Tallied-Client-IP`. That IP is what the daily limit counts.
+- **The API refuses to start in production** (`ENVIRONMENT=production`) if `WEB_PROXY_SECRET` is
+  missing or shorter than 32 characters. The dyno then crashes on boot with
+  `startup.refused reason=web_proxy_secret_missing_or_short` in `heroku logs`. Use the 64-character
+  value from section 1.
+- In development (`ENVIRONMENT=development`) the secret is optional, so tests and local runs work
+  without it.
+- Forwarded headers are still ignored: uvicorn starts with `--no-proxy-headers`
+  (`api/scripts/start.sh`; a test checks the flag stays), and `TRUST_PROXY_HEADERS=false`.
 
-Anyone calling the API directly from the internet therefore counts against the router's address
-(which varies), never against an IP they choose. After deploying, check it from your laptop. All four
-requests claim different IPs. Expect the fourth to get 429, as long as Heroku's router reaches the
-dyno from the same address each time (not verified; if you see four 202s, rerun it with more requests):
+After deploying, check from your laptop that direct calls are refused and only `/health` is open.
+Expect `403` four times, then `200`:
 
 ```bash
+API=https://YOUR-APP-xxxx.herokuapp.com
 for i in 1 2 3 4; do
-  curl -s -o /dev/null -w "%{http_code}\n" -H "X-Forwarded-For: 203.0.113.$i" \
-       -H "X-Tallied-Client-IP: 203.0.113.$i" -F monthly_rent=1100 -F consent=true \
-       -F files=@fixtures/genuine/payslip_2026-09.pdf https://YOUR-APP-xxxx.herokuapp.com/checks
+  curl -s -o /dev/null -w "%{http_code}\n" -H "X-Tallied-Client-IP: 203.0.113.$i" \
+       -F monthly_rent=1100 -F consent=true -F files=@fixtures/genuine/payslip_2026-09.pdf "$API/checks"
 done
+curl -s -o /dev/null -w "%{http_code}\n" "$API/health"
 ```
+
+The smoke test in section 11 checks the same thing, with a wrong secret too, for every kind of
+endpoint. If you ever change `WEB_PROXY_SECRET`, set the new value on Vercel and Heroku together
+(Vercel needs a redeploy). Until both match, every check fails with 403.
 
 ### Reading production data from your laptop (optional)
 

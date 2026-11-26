@@ -49,6 +49,9 @@ curl -F files=@fixtures/genuine/statement_2026-08.pdf -F files=@fixtures/genuine
      -F monthly_rent=1100 -F consent=true http://localhost:8000/checks
 ```
 
+That works locally (`ENVIRONMENT=development`). With `ENVIRONMENT=production`, every endpoint except
+`GET /health` also needs `-H "X-Tallied-Proxy-Secret: $WEB_PROXY_SECRET"`, or it answers 403.
+
 Every error is JSON: `{"error": {"code": "...", "message": "plain English"}}`.
 
 Tests and lint (API tests need the local Postgres running):
@@ -99,7 +102,9 @@ Open http://localhost:3000 (the API must be running too).
 - The browser only ever calls this app's own `/api/checks...` routes. They forward to the API from the
   server, so `API_URL` and `WEB_PROXY_SECRET` (in `web/.env.local`) never reach the browser.
 - Set the same `WEB_PROXY_SECRET` in `api/.env` so the API rate-limits each visitor rather than the web
-  server. On Vercel the visitor's IP comes from Vercel's `x-real-ip`. Elsewhere, only set
+  server. Every server-side call goes through `apiFetch` (`web/src/lib/api-server.ts`), which always
+  sends it. With `ENVIRONMENT=production` the API refuses (403) any request without it except
+  `GET /health`, and won't start unless it's at least 32 characters. On Vercel the visitor's IP comes from Vercel's `x-real-ip`. Elsewhere, only set
   `TRUST_FORWARDED_FOR=true` behind a proxy that overwrites `X-Forwarded-For`. Locally, every check
   counts against one shared limit.
 - Design tokens (colours and fonts) live in `web/tailwind.config.mts`. Use the names (`bg-canvas`,

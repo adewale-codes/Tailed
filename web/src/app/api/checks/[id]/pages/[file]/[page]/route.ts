@@ -1,8 +1,8 @@
-import { API_UNREACHABLE, apiUrl, errorResponse, isCheckId, relay } from "@/lib/api-server";
+import { API_UNREACHABLE, apiFetch, errorResponse, isCheckId, relay } from "@/lib/api-server";
 
 /** GET /api/checks/{id}/pages/{file}/{page}: the image (WebP) of a page with a finding. */
 export async function GET(
-  _request: Request,
+  request: Request,
   ctx: RouteContext<"/api/checks/[id]/pages/[file]/[page]">,
 ): Promise<Response> {
   const { id, file, page } = await ctx.params;
@@ -10,7 +10,7 @@ export async function GET(
     return errorResponse(404, "page_not_found", "We couldn't find that page.");
   }
   try {
-    return relay(await fetch(apiUrl(`/checks/${id}/pages/${file}/${page}`), { cache: "no-store" }));
+    return relay(await apiFetch(request, `/checks/${id}/pages/${file}/${page}`));
   } catch {
     return API_UNREACHABLE();
   }

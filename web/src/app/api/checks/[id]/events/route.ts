@@ -1,4 +1,4 @@
-import { apiUrl, isCheckId } from "@/lib/api-server";
+import { apiFetch, isCheckId } from "@/lib/api-server";
 
 const ALLOWED = new Set(["report_viewed", "evidence_opened"]);
 
@@ -11,11 +11,10 @@ export async function POST(request: Request, ctx: RouteContext<"/api/checks/[id]
   const body = (await request.json().catch(() => null)) as { name?: string } | null;
   if (isCheckId(id) && body?.name && ALLOWED.has(body.name)) {
     try {
-      await fetch(apiUrl(`/checks/${id}/events`), {
+      await apiFetch(request, `/checks/${id}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: body.name }),
-        cache: "no-store",
       });
     } catch {
       // ignored on purpose

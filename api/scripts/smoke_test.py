@@ -1,12 +1,13 @@
 """End-to-end smoke test of a running Tallied, through the web app's public routes.
 
     cd api
-    uv run python scripts/smoke_test.py --web https://YOUR-APP.vercel.app --api https://api.YOUR-DOMAIN
+    uv run python scripts/smoke_test.py --web https://tallied.vercel.app --api https://YOUR-APP-xxxx.herokuapp.com
 
 Uploads every synthetic fixture exactly as the browser does (chunked, through /api/...), waits
 for each report, compares the verdict with the fixture's expected.json, fetches every evidence
-page image, and checks the privacy page, security headers and API hardening. Uses only the
-synthetic documents in /fixtures. Prints no document contents.
+page image, and checks the privacy page, security headers and API hardening. With --api it also
+checks that the API refuses direct calls (403) and only /health is open. It never sends the proxy
+secret itself. Uses only the synthetic documents in /fixtures. Prints no document contents.
 
 Each fixture is one check, so 7 checks from your IP: raise CHECKS_PER_IP_PER_DAY on the API for
 the run (see DEPLOY.md), or use --cases to run a few at a time.
@@ -124,22 +125,35 @@ def check_site(web: httpx.Client, api: httpx.Client | None) -> None:
     ok("browser JS never sees the API URL", api is None or str(api.base_url).rstrip("/") not in home.text)
     expired = web.get("/api/checks/" + "x" * 43)
     ok("unknown check is a JSON 404", expired.status_code == 404 and "error" in expired.json())
+    # Through the web app, so the API sees the proxy secret. Refused before it uses a daily check.
+    bad = web.post("/api/checks", data={"monthly_rent": "1100", "consent": "true"},
+                   files={"files": ("x.pdf", b"MZ\x90\x00 not a pdf", "application/pdf")})
+    ok("API rejects a fake PDF by its real type", bad.status_code in (415, 429), f"HTTP {bad.status_code}")
+    ok("API errors are JSON with no stack trace",
+       "error" in bad.json() and "Traceback" not in bad.text and 'File "' not in bad.text,
+       f"HTTP {bad.status_code}")
 
     if api is None:
         return
     health = api.get("/health")
-    ok("API health", health.status_code == 200, f"HTTP {health.status_code}")
-    ok("API docs are off in production", api.get("/docs").status_code == 404)
+    ok("API health (open to monitors)", health.status_code == 200, f"HTTP {health.status_code}")
+    # Direct calls, without the web app's secret or with a wrong one, are all refused with 403.
+    form = {"data": {"monthly_rent": "1100", "consent": "true"},
+            "files": {"files": ("p.pdf", (FIXTURES / "genuine" / "payslip_2026-09.pdf").read_bytes(),
+                                "application/pdf")}}
+    direct = [("POST", "/checks", form), ("POST", "/uploads", {}),
+              ("GET", "/checks/" + "x" * 43, {}), ("GET", "/checks/" + "x" * 43 + "/progress", {}),
+              ("GET", "/checks/" + "x" * 43 + "/pages/1/1", {}),
+              ("POST", "/checks/" + "x" * 43 + "/feedback", {"json": {"vote": "up"}}),
+              ("GET", "/docs", {})]
+    for headers, label in [({}, "no secret"), ({"X-Tallied-Proxy-Secret": "not-the-secret"}, "wrong secret")]:
+        codes = [api.request(m, p, headers=headers, **kw) for m, p, kw in direct]
+        refused = all(r.status_code == 403 and r.json().get("error", {}).get("code") == "forbidden"
+                      for r in codes)
+        ok(f"API refuses direct calls ({label})", refused, " ".join(str(r.status_code) for r in codes))
     cors = api.options("/checks", headers={"Origin": "https://evil.example",
                                            "Access-Control-Request-Method": "POST"})
     ok("API CORS refuses other origins", "access-control-allow-origin" not in cors.headers)
-    boom = api.get("/checks/" + "x" * 43 + "/pages/1/999999999999999999999")
-    ok("API errors are JSON with no stack trace",
-       "error" in boom.json() and "Traceback" not in boom.text and 'File "' not in boom.text,
-       f"HTTP {boom.status_code}")
-    bad = api.post("/checks", data={"monthly_rent": "1100", "consent": "true"},
-                   files={"files": ("x.pdf", b"MZ\x90\x00 not a pdf", "application/pdf")})
-    ok("API rejects a fake PDF by its real type", bad.status_code in (415, 429), f"HTTP {bad.status_code}")
 
 
 def main() -> int:

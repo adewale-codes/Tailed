@@ -1,4 +1,4 @@
-import { API_UNREACHABLE, apiUrl, errorResponse, isCheckId, relay } from "@/lib/api-server";
+import { API_UNREACHABLE, apiFetch, errorResponse, isCheckId, relay } from "@/lib/api-server";
 
 /** POST /api/checks/{id}/feedback: forwards the JSON body unchanged (the API validates it). */
 export async function POST(request: Request, ctx: RouteContext<"/api/checks/[id]/feedback">): Promise<Response> {
@@ -8,11 +8,10 @@ export async function POST(request: Request, ctx: RouteContext<"/api/checks/[id]
   if (body.length > 10_000) return errorResponse(400, "invalid_feedback", "That comment is too long.");
   try {
     return relay(
-      await fetch(apiUrl(`/checks/${id}/feedback`), {
+      await apiFetch(request, `/checks/${id}/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
-        cache: "no-store",
       }),
     );
   } catch {

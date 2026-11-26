@@ -17,7 +17,7 @@ from app.api.uploads import router as uploads_router
 from app.config import get_settings
 from app.services.cleanup import fail_interrupted_checks, run_cleanup
 from app.services.errors import MESSAGES, ApiError
-from app.services.limits import reserve_ai_call
+from app.services.limits import has_proxy_secret, reserve_ai_call
 from app.services.uploads import MAX_CHUNK_BYTES
 
 # Logging policy: only check IDs, timings and error types. Never document
@@ -46,8 +46,23 @@ async def _cleanup_loop(minutes: int) -> None:
         await asyncio.sleep(minutes * 60)
 
 
+MIN_PROXY_SECRET_LENGTH = 32
+
+
+def check_proxy_secret_configured() -> None:
+    """Production refuses to start without a strong WEB_PROXY_SECRET: every request except
+    GET /health needs it, so without one the API would either refuse everything or, worse, be
+    open to direct calls that dodge the daily limit."""
+    s = get_settings()
+    if s.is_production and len(s.web_proxy_secret.strip()) < MIN_PROXY_SECRET_LENGTH:
+        log.error("startup.refused reason=web_proxy_secret_missing_or_short")
+        raise RuntimeError(f"WEB_PROXY_SECRET must be set to at least {MIN_PROXY_SECRET_LENGTH} "
+                           "random characters in production (see DEPLOY.md).")
+
+
 @contextlib.asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    check_proxy_secret_configured()  # uvicorn exits before binding $PORT if this raises
     set_guard(reserve_ai_call)
     # Checks the previous process was running can't finish: fail them now and refund the visitor.
     try:
@@ -92,6 +107,20 @@ async def limit_upload_size(request: Request, call_next):
         length = request.headers.get("content-length")
         if length and length.isdigit() and int(length) > MAX_CHUNK_BYTES + 64 * 1024:
             return _error("chunk_too_large")
+    return await call_next(request)
+
+
+# Declared last, so it runs first (outermost), before any other middleware or route.
+@app.middleware("http")
+async def require_web_app(request: Request, call_next):
+    """In production, only the web app may call the API: every request except GET /health must
+    carry X-Tallied-Proxy-Secret. Heroku's router reaches the dyno from changing internal addresses,
+    so without this, direct callers would get a fresh daily limit on almost every request.
+    Optional in development, so tests and local runs work without a secret."""
+    if (get_settings().is_production
+            and not (request.method == "GET" and request.url.path == "/health")
+            and not has_proxy_secret(request)):
+        return _error("forbidden")
     return await call_next(request)
 
 

@@ -7,7 +7,9 @@ import "server-only";
 
 const ID_RE = /^[A-Za-z0-9_-]{40,64}$/;
 
-export function apiUrl(path: string): string {
+// Not exported on purpose: every call to the API must go through apiFetch, so none can leave
+// without the proxy secret.
+function apiUrl(path: string): string {
   const base = process.env.API_URL ?? "http://localhost:8000";
   return `${base.replace(/\/$/, "")}${path}`;
 }
@@ -35,12 +37,32 @@ export function visitorIp(request: Request): string | null {
   return null;
 }
 
-/** Headers that let the API rate-limit per visitor rather than per web server. */
+/**
+ * Headers proving the request comes from this web app. In production the API refuses (403) any
+ * request without the secret, except GET /health. The visitor's IP is added when a trusted host
+ * told us what it is, so the API counts the daily limit per visitor.
+ */
 export function proxyHeaders(request: Request): Record<string, string> {
   const secret = process.env.WEB_PROXY_SECRET;
+  if (!secret) return {};
   const ip = visitorIp(request);
-  if (!secret || !ip) return {};
-  return { "X-Tallied-Proxy-Secret": secret, "X-Tallied-Client-IP": ip };
+  return ip ? { "X-Tallied-Proxy-Secret": secret, "X-Tallied-Client-IP": ip } : { "X-Tallied-Proxy-Secret": secret };
+}
+
+/**
+ * The only way this app calls the API. Every call carries proxyHeaders (callers can't override
+ * them) and is never cached.
+ */
+export function apiFetch(
+  request: Request,
+  path: string,
+  init: RequestInit & { duplex?: "half"; headers?: Record<string, string> } = {},
+): Promise<Response> {
+  return fetch(apiUrl(path), {
+    cache: "no-store",
+    ...init,
+    headers: { ...init.headers, ...proxyHeaders(request) },
+  } as RequestInit);
 }
 
 export function errorResponse(status: number, code: string, message: string): Response {

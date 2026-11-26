@@ -27,6 +27,7 @@ MESSAGES: dict[str, tuple[int, str]] = {
     "invalid_email": (400, "That email address doesn't look right."),
     "invalid_request": (400, "Something in the request wasn't right. Please try again."),
     "not_found": (404, "There's nothing here."),
+    "forbidden": (403, "This service only answers requests from the Tallied website."),
     "method_not_allowed": (405, "That isn't supported here."),
     "internal_error": (500, "Something went wrong on our side. Please try again."),
 }

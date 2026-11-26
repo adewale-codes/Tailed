@@ -849,3 +849,120 @@ def test_cleanup_fails_stuck_checks_and_gives_the_check_back(settings, db) -> No
     with TestClient(app) as c:
         progress = c.get(f"/checks/{stuck}/progress").json()
         assert progress["status"] == "failed" and progress["error"]["message"] == STUCK_MESSAGE
+
+
+# ---------------------------------------------------------------------------
+# Production: only the web app (with WEB_PROXY_SECRET) may call the API, except GET /health
+# ---------------------------------------------------------------------------
+
+SECRET = "web-proxy-secret-for-tests-0123456789abcdef"
+
+
+@pytest.fixture
+def production(settings, monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "web_proxy_secret", SECRET)
+    return settings
+
+
+def via_web_app(ip: str | None = None) -> dict[str, str]:
+    """Headers the web app's server-side routes send (web/src/lib/api-server.ts)."""
+    return {"X-Tallied-Proxy-Secret": SECRET, **({"X-Tallied-Client-IP": ip} if ip else {})}
+
+
+def every_endpoint(check_id: str) -> list[tuple[str, str, dict]]:
+    form = {"data": {"monthly_rent": "1100", "consent": "true"}, "files": fixture_files()}
+    return [
+        ("POST", "/checks", form),
+        ("POST", "/uploads", {}),
+        ("POST", f"/uploads/{'u' * 43}/chunks", {"data": {"index": "1", "offset": "0"},
+                                                 "files": {"chunk": ("b", b"%PDF-", "application/pdf")}}),
+        ("GET", f"/checks/{check_id}", {}),
+        ("GET", f"/checks/{check_id}/progress", {}),
+        ("GET", f"/checks/{check_id}/pages/1/1", {}),
+        ("POST", f"/checks/{check_id}/feedback", {"json": {"vote": "up"}}),
+        ("POST", f"/checks/{check_id}/events", {"json": {"name": "report_viewed"}}),
+        ("GET", "/docs", {}),
+        ("GET", "/no-such-path", {}),
+        ("POST", "/health", {}),
+    ]
+
+
+def test_direct_requests_without_the_secret_are_refused_in_production(client, production, db) -> None:
+    check_id = client.post("/checks", headers=via_web_app("198.51.100.1"),
+                           data={"monthly_rent": "1100", "consent": "true"},
+                           files=fixture_files("edited_balance")).json()["id"]
+    events_before = sql(db, "SELECT count(*) FROM events")[0][0]
+    for method, path, kwargs in every_endpoint(check_id):
+        res = client.request(method, path, **kwargs)
+        assert res.status_code == 403, (method, path)
+        assert res.json() == {"error": {"code": "forbidden", "message":
+                                        "This service only answers requests from the Tallied website."}}
+    # Refused before anything ran: no check, upload, feedback or event was recorded.
+    assert sql(db, "SELECT count(*) FROM checks")[0][0] == 1
+    assert sql(db, "SELECT count(*) FROM feedback")[0][0] == 0
+    assert sql(db, "SELECT count(*) FROM events")[0][0] == events_before
+    assert sql(db, "SELECT sum(count) FROM rate_limits")[0][0] == 1
+
+
+@pytest.mark.parametrize("wrong", ["", "wrong", SECRET[:-1], SECRET + "x", SECRET.upper()])
+def test_a_wrong_secret_is_refused_in_production(client, production, wrong) -> None:
+    for method, path, kwargs in every_endpoint("x" * 43):
+        res = client.request(method, path, headers={"X-Tallied-Proxy-Secret": wrong}, **kwargs)
+        assert res.status_code == 403, (method, path)
+
+
+def test_health_needs_no_secret_in_production(client, production) -> None:
+    res = client.get("/health")
+    assert res.status_code == 200 and res.json() == {"status": "ok"}
+
+
+def test_requests_through_the_web_app_work_and_count_per_visitor(client, production, db) -> None:
+    alice, bob = via_web_app("198.51.100.1"), via_web_app("198.51.100.2")
+    # The whole web-app flow: upload session, a piece, start, progress, report, page image, feedback.
+    upload_id = client.post("/uploads", headers=alice).json()["upload_id"]
+    name, data = raw_fixture()[0]
+    piece = client.post(f"/uploads/{upload_id}/chunks", headers=alice,
+                        data={"index": "1", "offset": "0", "name": name},
+                        files={"chunk": ("blob", data, "application/octet-stream")})
+    assert piece.status_code == 200
+    started = client.post("/checks", headers=alice,
+                          data={"upload_id": upload_id, "monthly_rent": "1100", "consent": "true"})
+    assert started.status_code == 202
+    check_id = started.json()["id"]
+    assert client.get(f"/checks/{check_id}/progress", headers=alice).json()["status"] == "done"
+    assert client.get(f"/checks/{check_id}", headers=alice).status_code == 200
+    flagged = upload(client, fixture_files("edited_balance"), headers=alice).json()["id"]
+    report = client.get(f"/checks/{flagged}", headers=alice).json()
+    file_key, page = next(iter(evidence_view_pages(report)))
+    assert client.get(f"/checks/{flagged}/pages/{file_key}/{page}", headers=alice).status_code == 200
+    assert client.post(f"/checks/{flagged}/feedback", headers=alice, json={"vote": "up"}).status_code == 201
+    assert client.post(f"/checks/{flagged}/events", headers=alice,
+                       json={"name": "report_viewed"}).status_code == 204
+
+    # Per visitor: Alice has used 2, Bob none.
+    assert upload(client, headers=alice).status_code == 202
+    assert upload(client, headers=alice).status_code == 429
+    assert client.post("/uploads", headers=alice).status_code == 429
+    assert [upload(client, headers=bob).status_code for _ in range(4)] == [202, 202, 202, 429]
+    # The secret without a visitor IP counts against the connecting address, like any other.
+    assert upload(client, headers=via_web_app()).status_code == 202
+
+
+def test_secret_is_optional_in_development(client, settings) -> None:
+    assert not settings.is_production
+    assert upload(client).status_code == 202
+    assert client.post("/uploads").status_code == 201
+
+
+@pytest.mark.parametrize("secret", ["", "   ", "too-short", "x" * 31])
+def test_production_refuses_to_start_without_a_strong_secret(settings, monkeypatch, secret) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "web_proxy_secret", secret)
+    with pytest.raises(RuntimeError, match="WEB_PROXY_SECRET"), TestClient(app):
+        pass
+
+
+def test_production_starts_with_a_strong_secret(production) -> None:
+    with TestClient(app) as c:
+        assert c.get("/health").status_code == 200
