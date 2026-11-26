@@ -2,3 +2,19 @@
 # Keep them LF even on Windows checkouts with core.autocrlf=true, or `sh` fails with
 # "set: Illegal option -" when the image is built locally.
 *.sh text eol=lf
+
+# Binary files: never convert line endings, on any machine. Without this, git guesses, and small
+# PDFs with no NUL byte were treated as text: a Windows checkout with core.autocrlf=true added a
+# \r to every line, so the sample PDFs on that machine no longer matched the ones Vercel serves,
+# and the API's sample hashes (taken from that checkout) rejected every sample in production.
+*.pdf binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary

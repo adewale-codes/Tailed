@@ -126,6 +126,23 @@ Config Vars**). Don't save them in a script or commit them. Section 7 explains e
 
 ## 6. Deploy the API: one Basic dyno
 
+First, from the repository root, check the production image the way Heroku will build it. This needs
+Docker and git, and takes a few minutes:
+
+```bash
+python api/scripts/image_test.py      # expect "ALL PASSED"
+```
+
+It builds `api/Dockerfile` with only `api/` as the build context, as `heroku.yml` does. It then runs
+the release phase and a production-mode web dyno, as a random user with 512 MB, and runs every
+"Try a sample" check end to end. The sample PDFs it uploads are the bytes git will deploy, which
+is what Vercel serves. It fails if your checkout's copies differ from those bytes. That once broke
+every sample in production while all local tests passed: Windows' `core.autocrlf` had rewritten the
+PDFs on one laptop. `.gitattributes` now marks `*.pdf` as binary. If antivirus on your machine
+re-signs HTTPS (the build fails with "invalid peer certificate"), see `--extra-ca` in the script.
+
+Then deploy:
+
 ```bash
 git push heroku main
 ```

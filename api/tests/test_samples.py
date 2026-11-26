@@ -63,6 +63,23 @@ def test_sample_hashes_match_the_fixtures_and_the_web_copies() -> None:
         assert expected["expected_verdict"] == EXPECTED[sample.id]
 
 
+def test_gitattributes_keeps_pdfs_byte_for_byte() -> None:
+    """Without `*.pdf binary`, a Windows checkout with core.autocrlf=true rewrites small PDFs
+    (\\n -> \\r\\n), so hashes taken there don't match what Vercel serves (this broke production)."""
+    lines = (REPO / ".gitattributes").read_text("utf-8").splitlines()
+    rules = {line.split()[0]: line.split()[1:] for line in lines if line.strip() and not line.startswith("#")}
+    assert "binary" in rules.get("*.pdf", [])
+
+
+def test_no_pdf_in_this_checkout_has_converted_line_endings() -> None:
+    """reportlab writes "\\n" line ends. A "\\r\\n" in the first two lines means git converted the file."""
+    pdfs = sorted(WEB_SAMPLES.glob("*/*.pdf")) + sorted((REPO / "fixtures").glob("*/*.pdf"))
+    assert len(pdfs) == 50
+    converted = [p.relative_to(REPO).as_posix() for p in pdfs
+                 if any(line.endswith(b"\r") for line in p.read_bytes().split(b"\n", 2)[:2])]
+    assert converted == [], "line endings converted; see .gitattributes and DEPLOY.md"
+
+
 def test_sample_documents_are_clearly_fictional() -> None:
     """Every page says it's a synthetic test document, from the fictional Northgate Bank."""
     import pdfplumber
@@ -272,3 +289,41 @@ def test_sample_events_and_feedback_are_tagged_and_kept_out_of_funnel(client, se
     real_part, sample_part = out.split("Sample checks (made-up documents")
     assert "REAL CHECKS (launch metrics)" in real_part
     assert "Yes 0, Not really 1" in real_part and "Yes 1, Not really 0" in sample_part
+
+
+# ---------------------------------------------------------------------------
+# Rejections are logged with a reason code only (never file names or contents)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("files", "reason"), [
+    ("one_missing", "reason=sample_file_count_mismatch expected=5 got=4"),
+    ("third_changed", "reason=sample_hash_mismatch position=3"),
+])
+def test_sample_rejection_logs_a_reason_code(client, settings, caplog, files, reason) -> None:
+    sent = sample_files("genuine")
+    if files == "one_missing":
+        sent = sent[:-1]
+    else:
+        name, data = sent[2]
+        sent[2] = (name, data + b"x")
+    with caplog.at_level("WARNING", logger="app.samples"):
+        assert run_sample(client, "genuine", files=sent).status_code == 400
+    lines = [r.getMessage() for r in caplog.records if r.name == "app.samples"]
+    assert lines == [f"sample.rejected sample=genuine {reason}"]
+    assert ".pdf" not in " ".join(lines) and "%PDF" not in " ".join(lines)
+
+
+def test_missing_sample_hashes_are_a_server_error_with_a_reason_code(client, settings, caplog,
+                                                                      monkeypatch) -> None:
+    import dataclasses
+
+    from app import samples
+
+    files = sample_files("genuine")  # the real documents, read before the hashes go missing
+    monkeypatch.setitem(samples.SAMPLES, "genuine", dataclasses.replace(samples.SAMPLES["genuine"], files=()))
+    with caplog.at_level("ERROR", logger="app.samples"):
+        res = run_sample(client, "genuine", files=files)
+    assert res.status_code == 500 and res.json()["error"]["code"] == "internal_error"
+    assert [r.getMessage() for r in caplog.records if r.name == "app.samples"] == [
+        "sample.rejected sample=genuine reason=sample_hashes_unavailable"]

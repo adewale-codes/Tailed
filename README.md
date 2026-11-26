@@ -110,6 +110,14 @@ Open http://localhost:3000 (the API must be running too).
 - Design tokens (colours and fonts) live in `web/tailwind.config.mts`. Use the names (`bg-canvas`,
   `text-ink`, `bg-accent`, `text-closer`...), never hex values.
 
+## Production image test
+
+`python api/scripts/image_test.py` (Docker and git, standard library only) builds the API image
+exactly as Heroku does, from `api/` alone, and runs every sample through it in production mode,
+uploading the PDFs as git stores them. Run it before deploying (DEPLOY.md, section 6). The same
+check runs under pytest with `TALLIED_IMAGE_TEST=1 uv run pytest tests/test_image.py -s`, and is
+skipped otherwise.
+
 ## End-to-end tests
 
 Browser tests in `web/e2e/` drive the real app with the synthetic fixtures: upload, live checks,

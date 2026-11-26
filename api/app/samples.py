@@ -4,13 +4,19 @@ The documents are the synthetic fixtures (fictional people, a fictional employer
 Northgate Bank). The web app serves copies as static files (web/public/samples/<id>/) and uploads
 them through the normal pipeline with `sample=<id>`. A check only counts as a sample if the
 uploaded files are exactly that sample's files, checked by SHA-256 here. So a real upload can't be
-labelled a sample to get round the daily limit. tests/test_samples.py keeps these hashes, the
-fixtures and the web copies in step.
+labelled a sample to get round the daily limit.
+
+The hashes are constants here, inside api/, because the image is built from api/ alone (heroku.yml):
+nothing outside api/ exists in production. They are the bytes git stores, which is what Vercel
+serves. .gitattributes marks *.pdf as binary so no checkout can change those bytes.
+tests/test_samples.py keeps these hashes, the fixtures, the web copies and .gitattributes in step,
+and api/scripts/image_test.py runs the samples against the real production image.
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal
@@ -18,6 +24,7 @@ from decimal import Decimal
 from app.services.errors import ApiError
 from app.services.uploads import SavedUpload
 
+log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Sample:
@@ -32,27 +39,27 @@ class Sample:
         return {"id": self.id, "title": self.title}
 
 
-_PAYSLIPS = (("payslip_2026-09.pdf", "bac4a35855c6e6190e421cab9d1dd6d92c58c41c7f994f98e0ec61be7bab202a"),
-             ("payslip_2026-10.pdf", "3fce1c54a1e7c23c7530caf89b5f03f28a693ae0be7f0f2befc3f65fe72515e6"))
+_PAYSLIPS = (("payslip_2026-09.pdf", "fdd730b30d46ad4199ac7de9324c1ff0c90e317a17d1a21e3562adef48ecc5af"),
+             ("payslip_2026-10.pdf", "88b1efb0347b1b0ec47b3f5410f2891cefe8db459c4635b1627719de96751835"))
 _STATEMENTS_AUG_SEP = (
-    ("statement_2026-08.pdf", "4dfdab8d1dc24f02fb38839b859d33ebb51f186783964d5758d54fa3abdf1947"),
-    ("statement_2026-09.pdf", "db3de116e78a7dcce3393afea9553991c9fd53b0a479616a2410014e7a9ff5b5"))
+    ("statement_2026-08.pdf", "c9acdb5d7533190138222c0f3746b501e9daa94b5666da9d72d8dfc49a506206"),
+    ("statement_2026-09.pdf", "59de274817b799483a488c502b268612f29be20cc23afd37f818f3e71729e43f"))
 
 SAMPLES: dict[str, Sample] = {s.id: s for s in [
     Sample("genuine", "A genuine tenant", "genuine", Decimal("1100.00"), (
         *_STATEMENTS_AUG_SEP,
-        ("statement_2026-10.pdf", "744c6b7b551f41439048ba91e059464453215fd37ef8235afa9fe9cd697f7fd1"),
+        ("statement_2026-10.pdf", "628b376bde1f38a21f631a635969c597e1a241d0d83942b9a9aa7dbeeff0d1b3"),
         *_PAYSLIPS)),
     Sample("edited_balance", "An edited bank statement", "edited_balance", Decimal("1100.00"), (
         *_STATEMENTS_AUG_SEP,
         ("statement_2026-10.pdf", "9d5877f90eeb9f0a44e8a9235c1371f5de73919ae222e57c278f0d73826ac46c"),
         *_PAYSLIPS)),
     Sample("multiple_problems", "Several problems at once", "multiple_problems", Decimal("1100.00"), (
-        ("statement_2026-08.pdf", "07d3800a96dd69a3a42b378695c2cd93871cb69439bbc566c288b6822fe0e70f"),
-        ("statement_2026-09.pdf", "1369e766b01f9f90583bde04718d52539638f4a3346828308d79a00bffbafb14"),
+        ("statement_2026-08.pdf", "293db7981a40ae15b3778ab106aa10142ac614c607e59879e11b41d2dad18787"),
+        ("statement_2026-09.pdf", "bbfe453747a29cc8ec9203a6db8c19a3e2a1a1ab15ced307858d681ceb0a9079"),
         ("statement_2026-10.pdf", "57ebf455b93da0c615136b536b388d80eabe180e7d24f1181b9f85d866b09de3"),
-        ("payslip_2026-09.pdf", "60a46bd3df2cb03432da9d30fb6548956aef3c8e80580cde24d4e1f25b1b848d"),
-        ("payslip_2026-10.pdf", "abcc245e848f6cd132e48e30fd2caa4c871e75391fbb23b2c0fd6c2378eb4c59"))),
+        ("payslip_2026-09.pdf", "b1c9c2035a0b43a25c1866395595b57e55e264aceafee975f4f79df82e3bcaa9"),
+        ("payslip_2026-10.pdf", "9ea58a5cc10001275d6ab15b68a7e38f8a8ea8abf8ee733c65a8ab7b13b37542"))),
 ]}
 
 
@@ -75,8 +82,24 @@ def sha256_file(path) -> str:
 
 
 def require_sample_files(sample: Sample, uploads: list[SavedUpload]) -> None:
-    """The uploads must be exactly this sample's documents (any order), or 400."""
-    want = Counter(h for _, h in sample.files)
-    got = Counter(sha256_file(u.path) for u in uploads)
-    if got != want:
+    """The uploads must be exactly this sample's documents (any order), or 400.
+
+    Every rejection logs one short reason code, the sample id and numbers only (never a file's
+    name or contents): sample_hashes_unavailable, sample_file_count_mismatch, or
+    sample_hash_mismatch with the 1-based position of the first upload that isn't in the sample.
+    """
+    if not sample.files:  # a broken build: nothing to compare with
+        log.error("sample.rejected sample=%s reason=sample_hashes_unavailable", sample.id)
+        raise ApiError("internal_error")
+    if len(uploads) != len(sample.files):
+        log.warning("sample.rejected sample=%s reason=sample_file_count_mismatch expected=%d got=%d",
+                    sample.id, len(sample.files), len(uploads))
         raise ApiError("not_a_sample")
+    remaining = Counter(h for _, h in sample.files)
+    for position, upload in enumerate(uploads, start=1):
+        digest = sha256_file(upload.path)
+        if remaining[digest] == 0:
+            log.warning("sample.rejected sample=%s reason=sample_hash_mismatch position=%d",
+                        sample.id, position)
+            raise ApiError("not_a_sample")
+        remaining[digest] -= 1
